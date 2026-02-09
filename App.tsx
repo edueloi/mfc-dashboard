@@ -36,10 +36,23 @@ type View = 'dashboard' | 'mfcistas' | 'equipes' | 'usuarios' | 'permissoes' | '
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedCityId, setSelectedCityId] = useState<string>('1');
+
+  // Ajusta o menu automaticamente ao redimensionar a tela
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 1024) {
+        setSidebarOpen(true);
+      } else {
+        setSidebarOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -72,6 +85,7 @@ const App: React.FC = () => {
       if (view === 'detalhe-equipe') setSelectedTeamId(id);
     }
     setCurrentView(view);
+    // No mobile/tablet, fecha o menu após selecionar uma opção
     if (window.innerWidth < 1024) setSidebarOpen(false);
   };
 
@@ -109,47 +123,73 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="h-screen w-screen bg-[#F8FAFC] flex font-sans overflow-hidden">
+      {/* Overlay para mobile quando o menu está aberto */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div 
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300" 
+          onClick={() => setSidebarOpen(false)} 
+        />
       )}
 
-      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:block`}>
+      {/* Menu Lateral Fixo */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-100 shadow-2xl lg:shadow-none
+        transform transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} 
+        lg:translate-x-0 lg:static lg:h-full flex-shrink-0
+      `}>
         <div className="h-full flex flex-col">
-          <div className="p-6 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">M</div>
-              <h1 className="text-xl font-bold text-gray-800">MFC Gestão</h1>
+          {/* Logo Section */}
+          <div className="p-8 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-600 rounded-[1.2rem] flex items-center justify-center text-white font-black shadow-lg shadow-blue-100 rotate-3">M</div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tighter">MFC Gestão</h1>
             </div>
-            <button className="lg:hidden" onClick={() => setSidebarOpen(false)}>
-              <X className="w-6 h-6 text-gray-400" />
+            <button className="lg:hidden p-2 hover:bg-slate-50 rounded-xl transition-colors" onClick={() => setSidebarOpen(false)}>
+              <X className="w-6 h-6 text-slate-400" />
             </button>
           </div>
 
-          <nav className="flex-1 px-4 space-y-1">
+          {/* Navigation Links */}
+          <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto no-scrollbar py-2">
             {filteredNav.map((item) => (
               <button
                 key={item.name}
                 onClick={() => handleNavigate(item.view)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${currentView === item.view ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'text-gray-600 hover:bg-gray-50'}`}
+                className={`
+                  w-full flex items-center gap-3.5 px-5 py-3.5 rounded-[1.5rem] text-sm font-bold transition-all duration-200 group
+                  ${currentView === item.view 
+                    ? 'bg-blue-600 text-white shadow-xl shadow-blue-100 scale-[1.02]' 
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
+                `}
               >
-                <item.icon className={`w-5 h-5 ${currentView === item.view ? 'text-white' : 'text-gray-400'}`} />
-                {item.name}
+                <item.icon className={`
+                  w-5 h-5 transition-transform duration-200
+                  ${currentView === item.view ? 'text-white' : 'text-slate-400 group-hover:scale-110 group-hover:text-blue-500'}
+                `} />
+                <span className="flex-1 text-left tracking-tight">{item.name}</span>
+                {currentView === item.view && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
               </button>
             ))}
           </nav>
 
-          <div className="p-4 border-t border-gray-100">
-            <div className="bg-gray-50 rounded-2xl p-3">
+          {/* User Profile Footer Section */}
+          <div className="p-6 mt-auto flex-shrink-0">
+            <div className="bg-slate-50 rounded-[2rem] p-4 border border-slate-100/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-                  {currentUser.name.substring(0, 2)}
+                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-blue-600 font-black">
+                  {currentUser.name.substring(0, 2).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900 truncate">{currentUser.name}</p>
-                  <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider truncate">{currentUser.role}</p>
+                  <p className="text-xs font-black text-slate-900 truncate leading-none mb-1">{currentUser.name}</p>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest truncate">{currentUser.role}</p>
                 </div>
-                <button onClick={handleLogout} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                <button 
+                  onClick={handleLogout} 
+                  className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
+                  title="Sair do Sistema"
+                >
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>
@@ -158,48 +198,65 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-        <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 lg:px-8">
-          <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
-            <Menu className="w-6 h-6 text-gray-600" />
-          </button>
-          
-          <div className="flex items-center gap-4">
-            {currentUser.role === UserRoleType.ADMIN ? (
-              <div className="relative group">
-                <button className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold border border-blue-100">
-                  <MapPin className="w-4 h-4" />
-                  {currentCity.name} - {currentCity.uf}
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-xl hidden group-hover:block z-50">
-                  {mockCities.map(city => (
-                    <button 
-                      key={city.id} 
-                      onClick={() => setSelectedCityId(city.id)}
-                      className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 first:rounded-t-xl last:rounded-b-xl"
-                    >
-                      {city.name} - {city.uf}
-                    </button>
-                  ))}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* Top Header Fixo */}
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-20 flex items-center justify-between px-6 lg:px-10 flex-shrink-0 z-30">
+          <div className="flex items-center gap-6">
+            <button 
+              className="lg:hidden p-3 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all shadow-sm active:scale-95" 
+              onClick={() => setSidebarOpen(true)}
+            >
+              <Menu className="w-6 h-6 text-slate-600" />
+            </button>
+            
+            <div className="flex items-center gap-4">
+              {currentUser.role === UserRoleType.ADMIN ? (
+                <div className="relative group">
+                  <button className="flex items-center gap-2.5 px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-2xl text-xs font-black border border-slate-200 shadow-sm transition-all active:scale-95">
+                    <MapPin className="w-4 h-4 text-blue-500" />
+                    <span className="uppercase tracking-widest">{currentCity.name} - {currentCity.uf}</span>
+                    <ChevronDown className="w-4 h-4 text-slate-300" />
+                  </button>
+                  <div className="absolute top-full left-0 mt-3 w-56 bg-white border border-slate-100 rounded-[1.8rem] shadow-2xl py-2 hidden group-hover:block z-50 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="px-5 py-2 border-b border-slate-50 mb-1">
+                      <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Alterar Unidade</p>
+                    </div>
+                    {mockCities.map(city => (
+                      <button 
+                        key={city.id} 
+                        onClick={() => setSelectedCityId(city.id)}
+                        className={`
+                          w-full text-left px-5 py-3 text-xs font-bold transition-colors flex items-center justify-between
+                          ${selectedCityId === city.id ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
+                        `}
+                      >
+                        {city.name} - {city.uf}
+                        {selectedCityId === city.id && <div className="w-1.5 h-1.5 bg-blue-600 rounded-full"></div>}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-gray-500 font-medium bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100">
-                <MapPin className="w-4 h-4 text-blue-500" />
-                <span>{currentCity.name} - {currentCity.uf}</span>
-              </div>
-            )}
+              ) : (
+                <div className="flex items-center gap-2.5 px-5 py-2.5 bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl border border-slate-100">
+                  <MapPin className="w-3.5 h-3.5 text-blue-500" />
+                  <span>{currentCity.name} - {currentCity.uf}</span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="hidden sm:block text-right px-4">
-            <p className="text-xs text-gray-400 font-medium">Data de hoje</p>
-            <p className="text-sm font-bold text-gray-700">{new Date().toLocaleDateString('pt-BR')}</p>
+          <div className="hidden sm:flex items-center gap-4 px-4 border-l border-slate-100 h-10 ml-auto">
+            <div className="text-right">
+              <p className="text-[10px] text-slate-300 font-black uppercase tracking-widest">Acesso do Dia</p>
+              <p className="text-sm font-black text-slate-700">{new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            </div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-8">
-          <div className="max-w-7xl mx-auto">
+        {/* Content Section Rolável */}
+        <main className="flex-1 overflow-y-auto p-6 lg:p-10 no-scrollbar bg-[#F8FAFC]">
+          <div className="max-w-7xl mx-auto pb-20">
             {renderContent()}
           </div>
         </main>
