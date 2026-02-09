@@ -3,8 +3,9 @@ import { Member, MemberStatus, BaseTeam, City, User, UserRoleType, Payment } fro
 
 export const mockCities: City[] = [
   { id: '1', name: 'Tatuí', uf: 'SP' },
-  { id: '2', name: 'Sorocaba', uf: 'SP' },
-  { id: '3', name: 'São Paulo', uf: 'SP' }
+  { id: '2', name: 'Pirassununga', uf: 'SP' },
+  { id: '3', name: 'Araraquara', uf: 'SP' },
+  { id: '4', name: 'Descalvado', uf: 'SP' }
 ];
 
 export const mockTeams: BaseTeam[] = [
