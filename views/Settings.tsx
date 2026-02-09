@@ -22,7 +22,16 @@ import {
   Power,
   Edit3,
   Clock,
-  History
+  History,
+  CheckCircle2,
+  ShieldCheck,
+  Eye,
+  Settings,
+  DollarSign,
+  UserCog,
+  ChevronRight,
+  ToggleLeft,
+  ToggleRight
 } from 'lucide-react';
 import { mockCities as initialCities, mockMembers, mockTeams } from '../mockData';
 import { UserRoleType, ModuleAction, City } from '../types';
@@ -39,6 +48,35 @@ const BRAZILIAN_STATES = [
   { uf: 'SP', name: 'São Paulo' }, { uf: 'SE', name: 'Sergipe' }, { uf: 'TO', name: 'Tocantins' }
 ];
 
+const MODULES = [
+  { id: 'dashboard', name: 'Dashboard', icon: History },
+  { id: 'mfcistas', name: 'Membros (MFCistas)', icon: Users },
+  { id: 'equipes', name: 'Equipes Base', icon: Layers },
+  { id: 'financeiro', name: 'Tesouraria de Equipes', icon: DollarSign },
+  { id: 'livro-caixa', name: 'Livro Caixa Geral', icon: Building2 },
+  { id: 'usuarios', name: 'Usuários do Sistema', icon: UserCog },
+  { id: 'configuracoes', name: 'Configurações', icon: Settings },
+];
+
+const ACTIONS: { id: ModuleAction; name: string }[] = [
+  { id: 'view', name: 'Visualizar' },
+  { id: 'create', name: 'Criar' },
+  { id: 'edit', name: 'Editar' },
+  { id: 'delete', name: 'Excluir' },
+  { id: 'launch', name: 'Lançar' },
+];
+
+interface RoleDefinition {
+  id: string;
+  name: string;
+  isSystem?: boolean;
+  permissions: {
+    [moduleId: string]: {
+      [actionId in ModuleAction]: boolean;
+    };
+  };
+}
+
 interface SettingsViewProps {
   initialTab: 'permissoes' | 'cidades';
 }
@@ -48,11 +86,35 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
   const [citySearch, setCitySearch] = useState('');
   const [cities, setCities] = useState<City[]>(initialCities);
   
-  // Modais
+  // State para Permissões
+  const [roles, setRoles] = useState<RoleDefinition[]>([
+    { 
+      id: '1', 
+      name: 'Administrador', 
+      isSystem: true,
+      permissions: MODULES.reduce((acc, mod) => ({
+        ...acc,
+        [mod.id]: ACTIONS.reduce((actAcc, act) => ({ ...actAcc, [act.id]: true }), {})
+      }), {})
+    },
+    { 
+      id: '2', 
+      name: 'Tesoureiro de Equipe', 
+      permissions: MODULES.reduce((acc, mod) => ({
+        ...acc,
+        [mod.id]: ACTIONS.reduce((actAcc, act) => ({ ...actAcc, [act.id]: mod.id === 'financeiro' }), {})
+      }), {})
+    }
+  ]);
+  const [selectedRoleId, setSelectedRoleId] = useState<string>(roles[0].id);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [newRoleName, setNewRoleName] = useState('');
+
+  // Modais Cidades
   const [showCityModal, setShowCityModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   
-  // Estados de formulário
+  // Estados de formulário Cidades
   const [editingCityId, setEditingCityId] = useState<string | null>(null);
   const [newCity, setNewCity] = useState({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
   const [cityToDelete, setCityToDelete] = useState<City | null>(null);
@@ -63,23 +125,47 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
     c.uf.toLowerCase().includes(citySearch.toLowerCase())
   );
 
-  const handleOpenAddModal = () => {
-    setEditingCityId(null);
-    setNewCity({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
-    setShowCityModal(true);
+  const handleSaveRole = () => {
+    if (!newRoleName.trim()) return;
+    const newRole: RoleDefinition = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newRoleName,
+      permissions: MODULES.reduce((acc, mod) => ({
+        ...acc,
+        [mod.id]: ACTIONS.reduce((actAcc, act) => ({ ...actAcc, [act.id]: false }), {})
+      }), {})
+    };
+    setRoles([...roles, newRole]);
+    setSelectedRoleId(newRole.id);
+    setShowRoleModal(false);
+    setNewRoleName('');
   };
 
-  const handleOpenEditModal = (city: City) => {
-    setEditingCityId(city.id);
-    setNewCity({ name: city.name, uf: city.uf, mfcSince: city.mfcSince || '' });
-    setShowCityModal(true);
+  const togglePermission = (moduleId: string, actionId: ModuleAction) => {
+    const role = roles.find(r => r.id === selectedRoleId);
+    if (!role || role.isSystem) return;
+
+    setRoles(roles.map(r => {
+      if (r.id === selectedRoleId) {
+        return {
+          ...r,
+          permissions: {
+            ...r.permissions,
+            [moduleId]: {
+              ...r.permissions[moduleId],
+              [actionId]: !r.permissions[moduleId][actionId]
+            }
+          }
+        };
+      }
+      return r;
+    }));
   };
 
   const handleSaveCity = () => {
     const cityNameTrimmed = newCity.name.trim();
     if (!cityNameTrimmed) return;
     
-    // Validação de duplicidade
     const isDuplicate = cities.some(c => 
       c.name.toLowerCase() === cityNameTrimmed.toLowerCase() && 
       c.id !== editingCityId
@@ -102,73 +188,130 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
       };
       setCities([...cities, city]);
     }
-    
     setShowCityModal(false);
   };
 
-  const handleOpenDeleteModal = (city: City) => {
-    setCityToDelete(city);
-    setDeleteConfirmationText('');
-    setShowDeleteModal(true);
-  };
-
-  const handleConfirmDelete = () => {
-    if (cityToDelete && deleteConfirmationText === cityToDelete.name.toUpperCase()) {
-      setCities(cities.filter(c => c.id !== cityToDelete.id));
-      setShowDeleteModal(false);
-      setCityToDelete(null);
-    }
-  };
-
-  const toggleCityStatus = (id: string) => {
-    setCities(cities.map(c => c.id === id ? { ...c, active: !c.active } : c));
-  };
-
-  const getCityImpact = (cityName: string) => {
-    const memberCount = mockMembers.filter(m => m.city === cityName).length;
-    const teamCount = mockTeams.filter(t => t.city === cityName).length;
-    return { memberCount, teamCount };
-  };
-
-  const calculateYearsOfMfc = (dateString?: string) => {
-    if (!dateString) return 0;
-    const diff = new Date().getTime() - new Date(dateString).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
-  };
-
-  const formatMfcDate = (dateString?: string) => {
-    if (!dateString) return '---';
-    const [year, month, day] = dateString.split('-');
-    return `${day}/${month}/${year}`;
-  };
-
-  const formatAnniversary = (dateString?: string) => {
-    if (!dateString) return '---';
-    const date = new Date(dateString);
-    // Ajuste de fuso horário local para não retroceder um dia
-    date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
-    return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
-  };
+  const selectedRole = roles.find(r => r.id === selectedRoleId);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-24 lg:pb-10">
-      {/* Header */}
+      {/* Header Centralizado */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-2 lg:px-0">
         <div>
           <h2 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Configurações</h2>
-          <p className="text-gray-500 font-medium text-sm lg:text-base">Gestão de acessos e unidades administrativas.</p>
+          <p className="text-gray-500 font-medium text-sm lg:text-base">Ajustes finos da plataforma MFC Gestão.</p>
         </div>
 
-        <div className="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-200/50 backdrop-blur-sm">
-          <button onClick={() => setActiveTab('permissoes')} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'permissoes' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>
-            <Shield className="w-4 h-4" /> Permissões
+        <div className="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-200/50 backdrop-blur-sm shadow-inner">
+          <button onClick={() => setActiveTab('permissoes')} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'permissoes' ? 'bg-white text-blue-600 shadow-xl shadow-gray-200/50 border border-gray-100' : 'text-gray-400'}`}>
+            <Shield className="w-4 h-4" /> Níveis de Acesso
           </button>
-          <button onClick={() => setActiveTab('cidades')} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'cidades' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-400'}`}>
-            <MapPin className="w-4 h-4" /> Unidades
+          <button onClick={() => setActiveTab('cidades')} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'cidades' ? 'bg-white text-blue-600 shadow-xl shadow-gray-200/50 border border-gray-100' : 'text-gray-400'}`}>
+            <MapPin className="w-4 h-4" /> Unidades do MFC
           </button>
         </div>
       </div>
 
+      {activeTab === 'permissoes' && (
+        <div className="flex flex-col lg:flex-row gap-8 animate-in slide-in-from-left-4 duration-500">
+          {/* Menu Lateral de Perfis */}
+          <div className="lg:w-80 flex flex-col gap-4 shrink-0">
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Perfis de Acesso</h3>
+              <button 
+                onClick={() => setShowRoleModal(true)}
+                className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-3 space-y-2">
+              {roles.map(role => (
+                <button
+                  key={role.id}
+                  onClick={() => setSelectedRoleId(role.id)}
+                  className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl text-sm font-bold transition-all group ${selectedRoleId === role.id ? 'bg-blue-600 text-white shadow-xl shadow-blue-100' : 'text-gray-500 hover:bg-gray-50'}`}
+                >
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedRoleId === role.id ? 'bg-white/20' : 'bg-gray-100 text-gray-400 group-hover:bg-blue-50'}`}>
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <span className="flex-1 text-left truncate">{role.name}</span>
+                  {selectedRoleId === role.id && <ChevronRight className="w-4 h-4" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Matriz de Permissões */}
+          <div className="flex-1 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+            <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-white sticky top-0 z-10">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight">Configurar: {selectedRole?.name}</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">
+                  {selectedRole?.isSystem ? 'PERFIL DE SISTEMA (NÃO EDITÁVEL)' : 'MARQUE O QUE ESTE PERFIL PODE ACESSAR'}
+                </p>
+              </div>
+              {!selectedRole?.isSystem && (
+                <button className="text-red-500 p-3 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            <div className="overflow-x-auto no-scrollbar">
+              <table className="w-full text-left border-separate border-spacing-0">
+                <thead>
+                  <tr className="bg-gray-50/50">
+                    <th className="px-10 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 sticky left-0 bg-gray-50/50 z-20">Módulo / Tela</th>
+                    {ACTIONS.map(action => (
+                      <th key={action.id} className="px-6 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b border-gray-100 text-center">{action.name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {MODULES.map(module => (
+                    <tr key={module.id} className="hover:bg-blue-50/10 transition-colors group">
+                      <td className="px-10 py-5 sticky left-0 bg-white group-hover:bg-blue-50/10 z-10 border-r border-gray-50 shadow-sm">
+                        <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center transition-colors group-hover:bg-blue-100 group-hover:text-blue-600">
+                            <module.icon className="w-5 h-5" />
+                          </div>
+                          <span className="text-sm font-black text-gray-700">{module.name}</span>
+                        </div>
+                      </td>
+                      {ACTIONS.map(action => {
+                        const isAllowed = selectedRole?.permissions[module.id]?.[action.id] || false;
+                        return (
+                          <td key={action.id} className="px-6 py-5 text-center">
+                            <button 
+                              disabled={selectedRole?.isSystem}
+                              onClick={() => togglePermission(module.id, action.id)}
+                              className={`p-2 rounded-xl transition-all ${isAllowed ? 'text-emerald-500 bg-emerald-50' : 'text-gray-200 bg-gray-50 hover:bg-gray-100'} ${selectedRole?.isSystem ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                              {isAllowed ? <CheckCircle2 className="w-6 h-6" /> : <X className="w-6 h-6" />}
+                            </button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {!selectedRole?.isSystem && (
+              <div className="p-10 bg-gray-50/50 border-t border-gray-50 flex justify-end">
+                <button className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-3">
+                  <Save className="w-5 h-5" /> Salvar Configurações
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Aba de Cidades (Existente) */}
       {activeTab === 'cidades' && (
         <div className="space-y-6 animate-in slide-in-from-right-4 duration-500">
           <div className="flex flex-col lg:flex-row gap-4 px-2 lg:px-0">
@@ -183,7 +326,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
               />
             </div>
             <button 
-              onClick={handleOpenAddModal}
+              onClick={() => {
+                setEditingCityId(null);
+                setNewCity({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
+                setShowCityModal(true);
+              }}
               className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group shrink-0"
             >
               <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
@@ -192,85 +339,100 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 lg:gap-6 px-2 lg:px-0">
-            {filteredCities.map(city => {
-              const years = calculateYearsOfMfc(city.mfcSince);
-              return (
-                <div 
-                  key={city.id} 
-                  className={`bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col group hover:shadow-xl transition-all relative overflow-hidden ${!city.active ? 'bg-gray-50/50' : ''}`}
-                >
-                  <div className="flex items-center justify-between mb-6">
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-inner ${city.active ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-400'}`}>
-                      <MapPin className="w-7 h-7" />
-                    </div>
-                    <div className="flex gap-1.5">
-                      <button 
-                        onClick={() => toggleCityStatus(city.id)}
-                        className={`p-2.5 rounded-xl transition-colors ${city.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-gray-300 hover:bg-gray-100'}`}
-                        title={city.active ? "Inativar Cidade" : "Ativar Cidade"}
-                      >
-                        <Power className="w-5 h-5" />
-                      </button>
-                      <button 
-                        onClick={() => handleOpenDeleteModal(city)}
-                        className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
+            {filteredCities.map(city => (
+              <div 
+                key={city.id} 
+                className={`bg-white p-7 rounded-[2.5rem] border border-gray-100 shadow-sm flex flex-col group hover:shadow-xl transition-all relative overflow-hidden ${!city.active ? 'bg-gray-50/50' : ''}`}
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-inner ${city.active ? 'bg-blue-50 text-blue-600' : 'bg-gray-200 text-gray-400'}`}>
+                    <MapPin className="w-7 h-7" />
                   </div>
-                  
-                  <div className="space-y-1">
-                    <h3 className={`text-2xl font-black tracking-tight leading-tight ${!city.active ? 'text-gray-400' : 'text-gray-900'}`}>{city.name}</h3>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Unidade {city.uf}</p>
-                  </div>
-                  
-                  {/* INFORMAÇÕES MFC E ANIVERSÁRIO - NOVO DESIGN */}
-                  <div className="mt-8 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-blue-50 text-blue-500 rounded-lg flex items-center justify-center">
-                        <History className="w-4 h-4" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">MFC desde</span>
-                        <span className="text-xs font-bold text-gray-700">{formatMfcDate(city.mfcSince)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <div className="flex items-center gap-2 bg-blue-600/5 px-3 py-1.5 rounded-xl border border-blue-600/10">
-                         <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                         <span className="text-[9px] font-black text-blue-700 uppercase">{years} Anos</span>
-                      </div>
-                      <div className="flex items-center gap-2 bg-emerald-600/5 px-3 py-1.5 rounded-xl border border-emerald-600/10">
-                         <Gift className="w-3.5 h-3.5 text-emerald-600" />
-                         <span className="text-[9px] font-black text-emerald-700 uppercase">Aniv: {formatAnniversary(city.mfcSince)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-8 pt-5 border-t border-gray-50 flex items-center justify-between">
-                     <div className="flex items-center gap-2">
-                        <div className={`w-2.5 h-2.5 rounded-full ${city.active ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-gray-300'}`}></div>
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${city.active ? 'text-emerald-600' : 'text-gray-400'}`}>
-                          {city.active ? 'Ativo' : 'Inativo'}
-                        </span>
-                     </div>
-                     <button 
-                      onClick={() => handleOpenEditModal(city)}
-                      className="text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all group/edit border border-transparent hover:border-blue-100"
+                  <div className="flex gap-1.5">
+                    <button 
+                      onClick={() => setCities(cities.map(c => c.id === city.id ? { ...c, active: !c.active } : c))}
+                      className={`p-2.5 rounded-xl transition-colors ${city.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-gray-300 hover:bg-gray-100'}`}
+                      title={city.active ? "Inativar" : "Ativar"}
                     >
-                      <Edit3 className="w-3.5 h-3.5 group-hover/edit:rotate-12 transition-transform" /> Editar
+                      <Power className="w-5 h-5" />
+                    </button>
+                    <button 
+                      onClick={() => { setCityToDelete(city); setShowDeleteModal(true); }}
+                      className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                    >
+                      <Trash2 className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
-              );
-            })}
+                <div className="space-y-1">
+                  <h3 className={`text-2xl font-black tracking-tight leading-tight ${!city.active ? 'text-gray-400' : 'text-gray-900'}`}>{city.name}</h3>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Unidade {city.uf}</p>
+                </div>
+                <div className="mt-8 pt-5 border-t border-gray-50 flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${city.active ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-gray-300'}`}></div>
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${city.active ? 'text-emerald-600' : 'text-gray-400'}`}>
+                        {city.active ? 'Ativo' : 'Inativo'}
+                      </span>
+                   </div>
+                   <button 
+                    onClick={() => {
+                      setEditingCityId(city.id);
+                      setNewCity({ name: city.name, uf: city.uf, mfcSince: city.mfcSince || '' });
+                      setShowCityModal(true);
+                    }}
+                    className="text-[9px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2 hover:bg-blue-50 px-4 py-2 rounded-xl transition-all group/edit border border-transparent hover:border-blue-100"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 group-hover/edit:rotate-12 transition-transform" /> Editar
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* MODAL CADASTRO / EDIÇÃO */}
+      {/* MODAL NOVO PERFIL / PERMISSÃO */}
+      {showRoleModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500">
+            <div className="p-10 border-b border-gray-50 text-center">
+              <div className="w-16 h-16 bg-blue-600 rounded-3xl flex items-center justify-center text-white mx-auto shadow-xl mb-6">
+                <Shield className="w-8 h-8" />
+              </div>
+              <h3 className="text-2xl font-black text-gray-900 leading-tight mb-2">Novo Perfil</h3>
+              <p className="text-sm text-gray-500 font-medium px-4">Defina um nome para o novo nível de acesso. Ele começará sem nenhuma permissão.</p>
+            </div>
+            <div className="p-10 space-y-8">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">NOME DO PERFIL</label>
+                <input 
+                  type="text" 
+                  placeholder="Ex: Secretário, Auxiliar de Tesouraria..."
+                  className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none"
+                  value={newRoleName}
+                  onChange={(e) => setNewRoleName(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={handleSaveRole}
+                  disabled={!newRoleName.trim()}
+                  className="w-full bg-blue-600 text-white py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-30 disabled:grayscale"
+                >
+                  Criar e Configurar
+                </button>
+                <button onClick={() => setShowRoleModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors">
+                  CANCELAR
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CIDADE (CADASTRO / EDIÇÃO) */}
       {showCityModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500">
@@ -286,7 +448,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
               </div>
               <button onClick={() => setShowCityModal(false)} className="p-2 hover:bg-gray-50 rounded-xl transition-all text-gray-300 hover:text-red-500"><X className="w-7 h-7" /></button>
             </div>
-
             <div className="p-8 space-y-8">
               <div>
                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">NOME DA UNIDADE</label>
@@ -298,7 +459,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                   onChange={(e) => setNewCity({...newCity, name: e.target.value})}
                 />
               </div>
-
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">ESTADO (UF)</label>
@@ -315,7 +475,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                     <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none" />
                   </div>
                 </div>
-
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">MFC DESDE</label>
                   <div className="relative">
@@ -330,7 +489,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                 </div>
               </div>
             </div>
-
             <div className="px-10 py-8 bg-white border-t border-gray-50 flex items-center justify-center gap-6">
               <button onClick={() => setShowCityModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors">CANCELAR</button>
               <button 
@@ -345,7 +503,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
         </div>
       )}
 
-      {/* MODAL EXCLUSÃO BLINDADO */}
+      {/* MODAL EXCLUSÃO (BLINDADO) */}
       {showDeleteModal && cityToDelete && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-red-100 animate-in zoom-in-95 duration-500">
@@ -357,20 +515,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                 <h3 className="text-2xl font-black text-gray-900 leading-tight mb-2">Atenção Crítica!</h3>
                 <p className="text-sm text-gray-500 font-medium">Você está prestes a excluir a unidade <span className="text-red-600 font-black">{cityToDelete.name}</span>.</p>
               </div>
-
-              <div className="grid grid-cols-2 gap-4 py-4">
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                  <Users className="w-5 h-5 text-blue-600 mx-auto mb-1" />
-                  <p className="text-xl font-black text-gray-900">{getCityImpact(cityToDelete.name).memberCount}</p>
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">MFCistas Afetados</p>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
-                  <Layers className="w-5 h-5 text-indigo-600 mx-auto mb-1" />
-                  <p className="text-xl font-black text-gray-900">{getCityImpact(cityToDelete.name).teamCount}</p>
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Equipes Base</p>
-                </div>
-              </div>
-
               <div className="space-y-4">
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">
                   Para confirmar, digite o nome da cidade abaixo em <span className="text-red-500">CAIXA ALTA</span>:
@@ -383,10 +527,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                   onChange={(e) => setDeleteConfirmationText(e.target.value)}
                 />
               </div>
-
               <div className="flex flex-col gap-3 pt-4">
                 <button 
-                  onClick={handleConfirmDelete}
+                  onClick={() => {
+                    if (deleteConfirmationText === cityToDelete.name.toUpperCase()) {
+                      setCities(cities.filter(c => c.id !== cityToDelete.id));
+                      setShowDeleteModal(false);
+                      setCityToDelete(null);
+                    }
+                  }}
                   disabled={deleteConfirmationText !== cityToDelete.name.toUpperCase()}
                   className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-100 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-30 disabled:grayscale"
                 >

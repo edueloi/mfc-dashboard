@@ -1,5 +1,5 @@
 
-import { Member, MemberStatus, BaseTeam, City, User, UserRoleType, Payment } from './types';
+import { Member, MemberStatus, BaseTeam, City, User, UserRoleType, Payment, Event, EventSale } from './types';
 
 export const mockCities: City[] = [
   { id: '1', name: 'Tatuí', uf: 'SP', mfcSince: '1965-07-01', active: true },
@@ -11,6 +11,28 @@ export const mockCities: City[] = [
 export const mockTeams: BaseTeam[] = [
   { id: 't1', name: 'São Paulo Apóstolo', city: 'Tatuí', state: 'SP', isYouth: false, createdAt: '2021-04-07', memberCount: 12 },
   { id: 't2', name: 'Nossa Senhora da Paz', city: 'Tatuí', state: 'SP', isYouth: true, createdAt: '2022-01-15', memberCount: 8 }
+];
+
+export const mockEvents: Event[] = [
+  {
+    id: 'ev1',
+    name: 'Jantar da Família 2024',
+    date: '2024-08-15',
+    costValue: 1500.00,
+    goalValue: 5000.00,
+    cityId: '1',
+    isActive: true,
+    showOnDashboard: true,
+    teamQuotas: [
+      { teamId: 't1', quotaValue: 2500.00 },
+      { teamId: 't2', quotaValue: 2500.00 }
+    ]
+  }
+];
+
+export const mockEventSales: EventSale[] = [
+  { id: 's1', eventId: 'ev1', teamId: 't1', memberId: 'm1', buyerName: 'Ricardo Silva', amount: 150.00, status: 'Pago', date: '2024-06-01' },
+  { id: 's2', eventId: 'ev1', teamId: 't1', memberId: 'm1', buyerName: 'Maria Oliveira', amount: 75.00, status: 'Pendente', date: '2024-06-02' }
 ];
 
 export const mockMembers: Member[] = [

@@ -22,15 +22,6 @@ export enum UserRoleType {
 
 export type ModuleAction = 'view' | 'create' | 'edit' | 'delete' | 'launch';
 
-export interface PermissionMatrix {
-  role: UserRoleType;
-  modules: {
-    [module: string]: {
-      [action in ModuleAction]: boolean;
-    };
-  };
-}
-
 export interface City {
   id: string;
   name: string;
@@ -51,6 +42,34 @@ export interface User {
   updatedAt: string;
 }
 
+export interface EventTeamQuota {
+  teamId: string;
+  quotaValue: number;
+}
+
+export interface Event {
+  id: string;
+  name: string;
+  date: string;
+  costValue: number;
+  goalValue: number;
+  cityId: string;
+  isActive: boolean;
+  showOnDashboard: boolean;
+  teamQuotas: EventTeamQuota[];
+}
+
+export interface EventSale {
+  id: string;
+  eventId: string;
+  teamId: string;
+  memberId: string; // Vendedor
+  buyerName: string;
+  amount: number;
+  status: 'Pago' | 'Pendente';
+  date: string;
+}
+
 export interface Payment {
   id: string;
   memberId: string;
@@ -69,18 +88,6 @@ export interface FinancialEntity {
   createdBy: string;
   observations?: string;
   initialBalance: number;
-}
-
-export interface Transaction {
-  id: string;
-  entityId: string;
-  type: 'Receita' | 'Despesa';
-  category: string;
-  amount: number;
-  description: string;
-  months: number[]; // 0-11 representing Jan-Dec
-  year: number;
-  date: string;
 }
 
 export interface Member {
