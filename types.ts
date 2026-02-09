@@ -124,6 +124,7 @@ export interface Member {
   movementRoles: string[];
   createdAt: string;
   updatedAt: string;
+  isPaymentInactive?: boolean;
 }
 
 export interface BaseTeam {

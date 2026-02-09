@@ -71,13 +71,44 @@ const App: React.FC = () => {
     { name: 'MFCistas', icon: Users, view: 'mfcistas' as View, roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE, UserRoleType.TESOUREIRO, UserRoleType.COORD_ESTADO] },
     { name: 'Equipes Base', icon: Layers, view: 'equipes' as View, roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE] },
     { name: 'Minha Equipe', icon: UserCheck, view: 'minha-equipe' as View, roles: [UserRoleType.TESOUREIRO, UserRoleType.COORD_EQUIPE_BASE, UserRoleType.USUARIO] },
-    { name: 'Tesouraria Equipes', icon: DollarSign, view: 'financeiro' as View, roles: [UserRoleType.ADMIN, UserRoleType.TESOUREIRO, UserRoleType.COORD_CIDADE] },
-    { name: 'Livro Caixa', icon: BookOpen, view: 'livro-caixa' as View, roles: [UserRoleType.ADMIN, UserRoleType.TESOUREIRO, UserRoleType.COORD_CIDADE] },
+    { 
+      name: 'Tesouraria Equipes', 
+      icon: DollarSign, 
+      view: 'financeiro' as View, 
+      roles: [
+        UserRoleType.ADMIN, 
+        UserRoleType.COORD_CIDADE, 
+        UserRoleType.COORD_ESTADO, 
+        UserRoleType.COORD_CONDIR, 
+        UserRoleType.VICE_COORD,
+        UserRoleType.TESOUREIRO
+      ],
+      // Regra especial: Tesoureiro de equipe (com teamId) não vê o financeiro geral
+      checkSpecial: (user: UserType) => user.role !== UserRoleType.TESOUREIRO || !user.teamId
+    },
+    { 
+      name: 'Livro Caixa', 
+      icon: BookOpen, 
+      view: 'livro-caixa' as View, 
+      roles: [
+        UserRoleType.ADMIN, 
+        UserRoleType.COORD_CIDADE, 
+        UserRoleType.COORD_ESTADO, 
+        UserRoleType.COORD_CONDIR, 
+        UserRoleType.VICE_COORD,
+        UserRoleType.TESOUREIRO
+      ],
+      checkSpecial: (user: UserType) => user.role !== UserRoleType.TESOUREIRO || !user.teamId
+    },
     { name: 'Usuários Sistema', icon: UserCog, view: 'usuarios' as View, roles: [UserRoleType.ADMIN] },
     { name: 'Configurações', icon: Settings, view: 'permissoes' as View, roles: [UserRoleType.ADMIN] },
   ];
 
-  const filteredNav = navigation.filter(item => !item.roles || item.roles.includes(currentUser.role));
+  const filteredNav = navigation.filter(item => {
+    const hasRole = !item.roles || item.roles.includes(currentUser.role);
+    const passesSpecial = !item.checkSpecial || item.checkSpecial(currentUser);
+    return hasRole && passesSpecial;
+  });
 
   const handleNavigate = (view: View, id?: string) => {
     if (id) {
