@@ -228,12 +228,19 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           )}
 
           <footer className="mt-12 pt-8 border-t border-slate-50">
-             <div className="flex items-center gap-4 px-6 py-4 bg-slate-50/50 rounded-2xl border border-slate-100/50">
-                <div className="text-[10px] leading-tight flex-1">
-                  <p className="font-black text-slate-400 uppercase tracking-widest mb-1">Acesso Temporário</p>
-                  <p className="text-slate-600 font-bold">Admin / qualquer</p>
+             <div className="flex flex-col gap-3 px-6 py-5 bg-slate-50/50 rounded-2xl border border-slate-100/50">
+                <div className="text-[10px] leading-tight">
+                  <p className="font-black text-slate-400 uppercase tracking-widest mb-2">Acessos de Teste (Usuário / Senha)</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-slate-600 font-black">ADMINISTRADOR:</span>
+                    <span className="text-blue-600 font-black">admin / qualquer</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600 font-black">TESOUREIRO:</span>
+                    <span className="text-indigo-600 font-black">alziraloretti / qualquer</span>
+                  </div>
                 </div>
-                <div className="text-[10px] text-right font-black text-blue-600 uppercase tracking-widest">
+                <div className="pt-3 border-t border-slate-200/50 text-[10px] text-center font-black text-slate-400 uppercase tracking-[0.2em]">
                   MFC Unidade Tatuí
                 </div>
              </div>
@@ -266,7 +273,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
               <div>
                 <h4 className="font-black text-sm uppercase tracking-widest mb-1 text-white">Gestão de MFCistas</h4>
-                <p className="text-blue-100/60 text-xs leading-relaxed font-medium">Fim das fichas de papel. Cadastro centralizado de jovens, adultos e 3ª idade para melhor acompanhamento.</p>
+                <p className="text-blue-100/60 text-xs leading-relaxed font-medium">Fim das fichas de papel. Cadastro centralizado de jovens, adults e 3ª idade para melhor acompanhamento.</p>
               </div>
             </div>
             <div className="flex items-start gap-5">
@@ -300,11 +307,5 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     </div>
   );
 };
-
-const InfoIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-  </svg>
-);
 
 export default Login;

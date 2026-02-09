@@ -23,6 +23,12 @@ export const mockEvents: Event[] = [
     cityId: '1',
     isActive: true,
     showOnDashboard: true,
+    ticketQuantity: 250,
+    ticketValue: 60.00,
+    expenses: [
+      { id: 'exp1', description: 'Aluguel do Salão', amount: 800.00 },
+      { id: 'exp2', description: 'Decoração e Flores', amount: 700.00 }
+    ],
     teamQuotas: [
       { teamId: 't1', quotaValue: 2500.00 },
       { teamId: 't2', quotaValue: 2500.00 }

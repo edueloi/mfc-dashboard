@@ -47,16 +47,26 @@ export interface EventTeamQuota {
   quotaValue: number;
 }
 
+export interface EventExpense {
+  id: string;
+  description: string;
+  amount: number;
+}
+
 export interface Event {
   id: string;
   name: string;
   date: string;
-  costValue: number;
+  costValue: number; // Agora é a soma das expenses
   goalValue: number;
   cityId: string;
   isActive: boolean;
   showOnDashboard: boolean;
   teamQuotas: EventTeamQuota[];
+  // Novos Campos
+  ticketQuantity?: number;
+  ticketValue?: number;
+  expenses: EventExpense[];
 }
 
 export interface EventSale {
