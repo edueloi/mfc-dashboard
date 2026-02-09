@@ -14,7 +14,8 @@ import {
   UserPlus,
   DollarSign,
   UserCheck,
-  ChevronDown
+  ChevronDown,
+  BookOpen
 } from 'lucide-react';
 import Dashboard from './views/Dashboard';
 import Members from './views/Members';
@@ -25,11 +26,12 @@ import SettingsView from './views/Settings';
 import UserManagement from './views/UserManagement';
 import MyTeamView from './views/MyTeam';
 import FinanceView from './views/Finance';
+import GeneralLedger from './views/GeneralLedger';
 import Login from './views/Login';
 import { UserRoleType, User as UserType } from './types';
 import { mockCities } from './mockData';
 
-type View = 'dashboard' | 'mfcistas' | 'equipes' | 'usuarios' | 'permissoes' | 'cidades' | 'perfil-membro' | 'detalhe-equipe' | 'minha-equipe' | 'financeiro';
+type View = 'dashboard' | 'mfcistas' | 'equipes' | 'usuarios' | 'permissoes' | 'cidades' | 'perfil-membro' | 'detalhe-equipe' | 'minha-equipe' | 'financeiro' | 'livro-caixa';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
@@ -39,7 +41,6 @@ const App: React.FC = () => {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedCityId, setSelectedCityId] = useState<string>('1');
 
-  // Recuperar cidade do usuário logado
   useEffect(() => {
     if (currentUser) {
       setSelectedCityId(currentUser.cityId);
@@ -57,7 +58,8 @@ const App: React.FC = () => {
     { name: 'MFCistas', icon: Users, view: 'mfcistas' as View, roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE, UserRoleType.TESOUREIRO, UserRoleType.COORD_ESTADO] },
     { name: 'Equipes Base', icon: Layers, view: 'equipes' as View, roles: [UserRoleType.ADMIN, UserRoleType.COORD_CIDADE] },
     { name: 'Minha Equipe', icon: UserCheck, view: 'minha-equipe' as View, roles: [UserRoleType.TESOUREIRO, UserRoleType.COORD_EQUIPE_BASE, UserRoleType.USUARIO] },
-    { name: 'Financeiro', icon: DollarSign, view: 'financeiro' as View, roles: [UserRoleType.ADMIN, UserRoleType.TESOUREIRO, UserRoleType.COORD_CIDADE, UserRoleType.COORD_ESTADO] },
+    { name: 'Tesouraria Equipes', icon: DollarSign, view: 'financeiro' as View, roles: [UserRoleType.ADMIN, UserRoleType.TESOUREIRO, UserRoleType.COORD_CIDADE] },
+    { name: 'Livro Caixa', icon: BookOpen, view: 'livro-caixa' as View, roles: [UserRoleType.ADMIN, UserRoleType.TESOUREIRO, UserRoleType.COORD_CIDADE] },
     { name: 'Usuários Sistema', icon: UserCog, view: 'usuarios' as View, roles: [UserRoleType.ADMIN] },
     { name: 'Configurações', icon: Settings, view: 'permissoes' as View, roles: [UserRoleType.ADMIN] },
   ];
@@ -94,6 +96,8 @@ const App: React.FC = () => {
         return <MyTeamView teamId={currentUser.teamId || 't1'} userId={currentUser.id} onOpenMember={(id) => handleNavigate('perfil-membro', id)} />;
       case 'financeiro':
         return <FinanceView cityId={selectedCityId} />;
+      case 'livro-caixa':
+        return <GeneralLedger />;
       case 'permissoes':
       case 'cidades':
         return <SettingsView initialTab={currentView === 'cidades' ? 'cidades' : 'permissoes'} />;
@@ -110,7 +114,6 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:block`}>
         <div className="h-full flex flex-col">
           <div className="p-6 flex items-center justify-between">
@@ -155,7 +158,6 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 lg:px-8">
           <button className="lg:hidden" onClick={() => setSidebarOpen(true)}>
@@ -190,11 +192,9 @@ const App: React.FC = () => {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
-             <div className="hidden sm:block text-right">
-                <p className="text-xs text-gray-400 font-medium">Data de hoje</p>
-                <p className="text-sm font-bold text-gray-700">{new Date().toLocaleDateString('pt-BR')}</p>
-             </div>
+          <div className="hidden sm:block text-right px-4">
+            <p className="text-xs text-gray-400 font-medium">Data de hoje</p>
+            <p className="text-sm font-bold text-gray-700">{new Date().toLocaleDateString('pt-BR')}</p>
           </div>
         </header>
 

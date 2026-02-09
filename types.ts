@@ -44,7 +44,7 @@ export interface User {
   name: string;
   cityId: string;
   role: UserRoleType;
-  teamId?: string; // Equipe que o usuário pertence
+  teamId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -55,9 +55,30 @@ export interface Payment {
   teamId: string;
   amount: number;
   date: string;
-  referenceMonth: string; // MM/YYYY
+  referenceMonth: string;
   status: 'Pago' | 'Pendente' | 'Isento';
-  launchedBy: string; // userId
+  launchedBy: string;
+}
+
+export interface FinancialEntity {
+  id: string;
+  name: string;
+  year: number;
+  createdBy: string;
+  observations?: string;
+  initialBalance: number;
+}
+
+export interface Transaction {
+  id: string;
+  entityId: string;
+  type: 'Receita' | 'Despesa';
+  category: string;
+  amount: number;
+  description: string;
+  months: number[]; // 0-11 representing Jan-Dec
+  year: number;
+  date: string;
 }
 
 export interface Member {
@@ -78,7 +99,6 @@ export interface Member {
   emergencyPhone: string;
   status: MemberStatus;
   teamId?: string;
-  // Address
   street: string;
   number: string;
   neighborhood: string;
@@ -88,7 +108,6 @@ export interface Member {
   state: string;
   condir: string;
   naturalness: string;
-  // Others
   father: string;
   mother: string;
   smoker: boolean;
@@ -102,7 +121,6 @@ export interface Member {
   profession: string;
   religion: string;
   education: string;
-  // Roles inside movement
   movementRoles: string[];
   createdAt: string;
   updatedAt: string;
