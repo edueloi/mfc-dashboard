@@ -2,10 +2,10 @@
 import { Member, MemberStatus, BaseTeam, City, User, UserRoleType, Payment } from './types';
 
 export const mockCities: City[] = [
-  { id: '1', name: 'Tatuí', uf: 'SP' },
-  { id: '2', name: 'Pirassununga', uf: 'SP' },
-  { id: '3', name: 'Araraquara', uf: 'SP' },
-  { id: '4', name: 'Descalvado', uf: 'SP' }
+  { id: '1', name: 'Tatuí', uf: 'SP', mfcSince: '1965-07-01' },
+  { id: '2', name: 'Pirassununga', uf: 'SP', mfcSince: '1980-05-15' },
+  { id: '3', name: 'Araraquara', uf: 'SP', mfcSince: '1995-10-20' },
+  { id: '4', name: 'Descalvado', uf: 'SP', mfcSince: '2010-03-12' }
 ];
 
 export const mockTeams: BaseTeam[] = [

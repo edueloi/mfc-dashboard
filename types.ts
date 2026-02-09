@@ -35,6 +35,7 @@ export interface City {
   id: string;
   name: string;
   uf: string;
+  mfcSince?: string;
 }
 
 export interface User {
