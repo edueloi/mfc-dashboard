@@ -100,6 +100,17 @@ export interface FinancialEntity {
   initialBalance: number;
 }
 
+export interface FinancialLaunch {
+  id: string;
+  entityId: string;
+  type: 'Receita' | 'Despesa';
+  category: string;
+  amount: number;
+  description?: string;
+  month: number;
+  year: number;
+}
+
 export interface Member {
   id: string;
   name: string;

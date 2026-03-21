@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Shield, 
   MapPin, 
@@ -33,8 +33,14 @@ import {
   ToggleLeft,
   ToggleRight
 } from 'lucide-react';
-import { mockCities as initialCities, mockMembers, mockTeams } from '../mockData';
+import { mockMembers, mockTeams } from '../mockData';
 import { UserRoleType, ModuleAction, City } from '../types';
+import { api } from '../services/api';
+import Button from '../components/Button';
+import Modal from '../components/Modal';
+import Dropdown from '../components/Dropdown';
+import DateInput from '../components/DateInput';
+import BooleanInput from '../components/BooleanInput';
 
 const BRAZILIAN_STATES = [
   { uf: 'AC', name: 'Acre' }, { uf: 'AL', name: 'Alagoas' }, { uf: 'AP', name: 'Amapá' },
@@ -84,7 +90,8 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [citySearch, setCitySearch] = useState('');
-  const [cities, setCities] = useState<City[]>(initialCities);
+  const [cities, setCities] = useState<City[]>([]);
+  const [loading, setLoading] = useState(false);
   
   // State para Permissões
   const [roles, setRoles] = useState<RoleDefinition[]>([
@@ -119,6 +126,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
   const [newCity, setNewCity] = useState({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
   const [cityToDelete, setCityToDelete] = useState<City | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
+
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const data = await api.getCities();
+        setCities(data);
+      } catch (err) {
+        console.error('Failed to fetch cities', err);
+      }
+    };
+    fetchCities();
+  }, []);
 
   const filteredCities = cities.filter(c => 
     c.name.toLowerCase().includes(citySearch.toLowerCase()) || 
@@ -162,7 +181,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
     }));
   };
 
-  const handleSaveCity = () => {
+  const handleSaveCity = async () => {
     const cityNameTrimmed = newCity.name.trim();
     if (!cityNameTrimmed) return;
     
@@ -176,19 +195,54 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
       return;
     }
 
-    if (editingCityId) {
-      setCities(cities.map(c => c.id === editingCityId ? { ...c, name: cityNameTrimmed, uf: newCity.uf, mfcSince: newCity.mfcSince } : c));
-    } else {
-      const city: City = {
-        id: (cities.length + 1).toString(),
-        name: cityNameTrimmed,
-        uf: newCity.uf,
-        mfcSince: newCity.mfcSince,
-        active: true
-      };
-      setCities([...cities, city]);
+    setLoading(true);
+    try {
+      if (editingCityId) {
+        const updated = await api.updateCity(editingCityId, { 
+          name: cityNameTrimmed, 
+          uf: newCity.uf, 
+          mfcSince: newCity.mfcSince,
+          active: cities.find(c => c.id === editingCityId)?.active ?? true
+        });
+        setCities(cities.map(c => c.id === editingCityId ? updated : c));
+      } else {
+        const created = await api.createCity({
+          name: cityNameTrimmed,
+          uf: newCity.uf,
+          mfcSince: newCity.mfcSince,
+          active: true
+        });
+        setCities([...cities, created]);
+      }
+      setShowCityModal(false);
+    } catch (err) {
+      console.error('Failed to save city', err);
+    } finally {
+      setLoading(false);
     }
-    setShowCityModal(false);
+  };
+
+  const toggleCityActive = async (city: City) => {
+    try {
+      const updated = await api.updateCity(city.id, { ...city, active: !city.active });
+      setCities(cities.map(c => c.id === city.id ? updated : c));
+    } catch (err) {
+      console.error('Failed to toggle city active', err);
+    }
+  };
+
+  const handleDeleteCity = async () => {
+    if (!cityToDelete || deleteConfirmationText !== cityToDelete.name.toUpperCase()) return;
+    
+    try {
+      await api.deleteCity(cityToDelete.id);
+      setCities(cities.filter(c => c.id !== cityToDelete.id));
+      setShowDeleteModal(false);
+      setCityToDelete(null);
+      setDeleteConfirmationText('');
+    } catch (err) {
+      console.error('Failed to delete city', err);
+    }
   };
 
   const selectedRole = roles.find(r => r.id === selectedRoleId);
@@ -203,12 +257,22 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
         </div>
 
         <div className="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-200/50 backdrop-blur-sm shadow-inner">
-          <button onClick={() => setActiveTab('permissoes')} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'permissoes' ? 'bg-white text-blue-600 shadow-xl shadow-gray-200/50 border border-gray-100' : 'text-gray-400'}`}>
-            <Shield className="w-4 h-4" /> Níveis de Acesso
-          </button>
-          <button onClick={() => setActiveTab('cidades')} className={`flex-1 lg:flex-none flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'cidades' ? 'bg-white text-blue-600 shadow-xl shadow-gray-200/50 border border-gray-100' : 'text-gray-400'}`}>
-            <MapPin className="w-4 h-4" /> Unidades do MFC
-          </button>
+          <Button 
+            variant={activeTab === 'permissoes' ? 'primary' : 'ghost'}
+            onClick={() => setActiveTab('permissoes')}
+            className={`flex-1 lg:flex-none px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'permissoes' ? 'bg-white text-blue-600 shadow-xl shadow-gray-200/50 border border-gray-100' : 'text-gray-400'}`}
+            icon={<Shield className="w-4 h-4" />}
+          >
+            Níveis de Acesso
+          </Button>
+          <Button 
+            variant={activeTab === 'cidades' ? 'primary' : 'ghost'}
+            onClick={() => setActiveTab('cidades')}
+            className={`flex-1 lg:flex-none px-8 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'cidades' ? 'bg-white text-blue-600 shadow-xl shadow-gray-200/50 border border-gray-100' : 'text-gray-400'}`}
+            icon={<MapPin className="w-4 h-4" />}
+          >
+            Unidades do MFC
+          </Button>
         </div>
       </div>
 
@@ -218,12 +282,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
           <div className="lg:w-80 flex flex-col gap-4 shrink-0">
             <div className="flex items-center justify-between px-2">
               <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">Perfis de Acesso</h3>
-              <button 
+              <Button 
                 onClick={() => setShowRoleModal(true)}
+                variant="ghost"
+                size="sm"
                 className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all shadow-sm"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
+                icon={<Plus className="w-4 h-4" />}
+              />
             </div>
             
             <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-3 space-y-2">
@@ -302,9 +367,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
             
             {!selectedRole?.isSystem && (
               <div className="p-10 bg-gray-50/50 border-t border-gray-50 flex justify-end">
-                <button className="bg-blue-600 text-white px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-3">
-                  <Save className="w-5 h-5" /> Salvar Configurações
-                </button>
+                <Button 
+                  icon={<Save className="w-5 h-5" />}
+                  className="px-12 py-4"
+                >
+                  Salvar Configurações
+                </Button>
               </div>
             )}
           </div>
@@ -325,17 +393,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                 onChange={(e) => setCitySearch(e.target.value)}
               />
             </div>
-            <button 
+            <Button 
               onClick={() => {
                 setEditingCityId(null);
                 setNewCity({ name: '', uf: 'SP', mfcSince: new Date().toISOString().split('T')[0] });
                 setShowCityModal(true);
               }}
-              className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group shrink-0"
+              icon={<Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />}
+              className="shrink-0"
             >
-              <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
               Nova Unidade
-            </button>
+            </Button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4 lg:gap-6 px-2 lg:px-0">
@@ -350,7 +418,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
                   </div>
                   <div className="flex gap-1.5">
                     <button 
-                      onClick={() => setCities(cities.map(c => c.id === city.id ? { ...c, active: !c.active } : c))}
+                      onClick={() => toggleCityActive(city)}
                       className={`p-2.5 rounded-xl transition-colors ${city.active ? 'text-emerald-500 hover:bg-emerald-50' : 'text-gray-300 hover:bg-gray-100'}`}
                       title={city.active ? "Inativar" : "Ativar"}
                     >
@@ -393,162 +461,126 @@ const SettingsView: React.FC<SettingsViewProps> = ({ initialTab }) => {
       )}
 
       {/* MODAL NOVO PERFIL / PERMISSÃO */}
-      {showRoleModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500">
-            <div className="p-10 border-b border-gray-50 text-center">
-              <div className="w-16 h-16 bg-blue-600 rounded-3xl flex items-center justify-center text-white mx-auto shadow-xl mb-6">
-                <Shield className="w-8 h-8" />
-              </div>
-              <h3 className="text-2xl font-black text-gray-900 leading-tight mb-2">Novo Perfil</h3>
-              <p className="text-sm text-gray-500 font-medium px-4">Defina um nome para o novo nível de acesso. Ele começará sem nenhuma permissão.</p>
-            </div>
-            <div className="p-10 space-y-8">
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">NOME DO PERFIL</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Secretário, Auxiliar de Tesouraria..."
-                  className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none"
-                  value={newRoleName}
-                  onChange={(e) => setNewRoleName(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="flex flex-col gap-3">
-                <button 
-                  onClick={handleSaveRole}
-                  disabled={!newRoleName.trim()}
-                  className="w-full bg-blue-600 text-white py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 disabled:opacity-30 disabled:grayscale"
-                >
-                  Criar e Configurar
-                </button>
-                <button onClick={() => setShowRoleModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors">
-                  CANCELAR
-                </button>
-              </div>
-            </div>
+      <Modal
+        isOpen={showRoleModal}
+        onClose={() => setShowRoleModal(false)}
+        title="Novo Perfil"
+        description="Defina um nome para o novo nível de acesso. Ele começará sem nenhuma permissão."
+        icon={<Shield className="w-8 h-8" />}
+      >
+        <div className="space-y-8">
+          <div>
+            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">NOME DO PERFIL</label>
+            <input 
+              type="text" 
+              placeholder="Ex: Secretário, Auxiliar de Tesouraria..."
+              className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none"
+              value={newRoleName}
+              onChange={(e) => setNewRoleName(e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div className="flex flex-col gap-3">
+            <Button 
+              onClick={handleSaveRole}
+              disabled={!newRoleName.trim()}
+              className="w-full"
+            >
+              Criar e Configurar
+            </Button>
+            <Button variant="ghost" onClick={() => setShowRoleModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors">
+              CANCELAR
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* MODAL CIDADE (CADASTRO / EDIÇÃO) */}
-      {showCityModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500">
-            <div className="px-8 py-8 border-b border-gray-50 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100">
-                  <Building2 className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-gray-900 leading-none mb-1">{editingCityId ? 'Editar Unidade' : 'Nova Unidade'}</h3>
-                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">DADOS DA CIDADE NO SISTEMA</p>
-                </div>
-              </div>
-              <button onClick={() => setShowCityModal(false)} className="p-2 hover:bg-gray-50 rounded-xl transition-all text-gray-300 hover:text-red-500"><X className="w-7 h-7" /></button>
+      <Modal
+        isOpen={showCityModal}
+        onClose={() => setShowCityModal(false)}
+        title={editingCityId ? 'Editar Unidade' : 'Nova Unidade'}
+        description="DADOS DA CIDADE NO SISTEMA"
+        icon={<Building2 className="w-6 h-6" />}
+      >
+        <div className="space-y-8">
+          <div>
+            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">NOME DA UNIDADE</label>
+            <input 
+              type="text" 
+              placeholder="Ex: Tatuí"
+              className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none"
+              value={newCity.name}
+              onChange={(e) => setNewCity({...newCity, name: e.target.value})}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">ESTADO (UF)</label>
+              <Dropdown
+                options={BRAZILIAN_STATES.map(state => ({ value: state.uf, label: `${state.name} (${state.uf})` }))}
+                value={newCity.uf}
+                onChange={(val) => setNewCity({...newCity, uf: val})}
+                placeholder="Selecione o estado"
+              />
             </div>
-            <div className="p-8 space-y-8">
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">NOME DA UNIDADE</label>
-                <input 
-                  type="text" 
-                  placeholder="Ex: Tatuí"
-                  className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none"
-                  value={newCity.name}
-                  onChange={(e) => setNewCity({...newCity, name: e.target.value})}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">ESTADO (UF)</label>
-                  <div className="relative">
-                    <select 
-                      className="w-full pl-6 pr-12 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none appearance-none"
-                      value={newCity.uf}
-                      onChange={(e) => setNewCity({...newCity, uf: e.target.value})}
-                    >
-                      {BRAZILIAN_STATES.map(state => (
-                        <option key={state.uf} value={state.uf}>{state.name} ({state.uf})</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2 ml-1">MFC DESDE</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
-                    <input 
-                      type="date"
-                      className="w-full pl-14 pr-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 focus:bg-white transition-all outline-none"
-                      value={newCity.mfcSince}
-                      onChange={(e) => setNewCity({...newCity, mfcSince: e.target.value})}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="px-10 py-8 bg-white border-t border-gray-50 flex items-center justify-center gap-6">
-              <button onClick={() => setShowCityModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors">CANCELAR</button>
-              <button 
-                onClick={handleSaveCity}
-                disabled={!newCity.name}
-                className="bg-blue-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-3 disabled:opacity-50"
-              >
-                <Save className="w-5 h-5" /> {editingCityId ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR UNIDADE'}
-              </button>
+            <div>
+              <DateInput
+                label="MFC DESDE"
+                value={newCity.mfcSince}
+                onChange={(val) => setNewCity({...newCity, mfcSince: val})}
+              />
             </div>
           </div>
+          <div className="flex items-center justify-center gap-6 pt-4">
+            <Button variant="ghost" onClick={() => setShowCityModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors">CANCELAR</Button>
+            <Button 
+              onClick={handleSaveCity}
+              disabled={!newCity.name}
+              icon={<Save className="w-5 h-5" />}
+            >
+              {editingCityId ? 'SALVAR ALTERAÇÕES' : 'ADICIONAR UNIDADE'}
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
 
       {/* MODAL EXCLUSÃO (BLINDADO) */}
-      {showDeleteModal && cityToDelete && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-red-100 animate-in zoom-in-95 duration-500">
-            <div className="p-8 text-center space-y-6">
-              <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mx-auto shadow-inner">
-                <AlertTriangle className="w-10 h-10" />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-gray-900 leading-tight mb-2">Atenção Crítica!</h3>
-                <p className="text-sm text-gray-500 font-medium">Você está prestes a excluir a unidade <span className="text-red-600 font-black">{cityToDelete.name}</span>.</p>
-              </div>
-              <div className="space-y-4">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">
-                  Para confirmar, digite o nome da cidade abaixo em <span className="text-red-500">CAIXA ALTA</span>:
-                </p>
-                <input 
-                  type="text" 
-                  className="w-full px-6 py-4 bg-red-50/30 border border-red-100 rounded-2xl text-center font-black text-red-600 placeholder:text-red-200 focus:outline-none focus:ring-4 focus:ring-red-50 transition-all"
-                  placeholder={cityToDelete.name.toUpperCase()}
-                  value={deleteConfirmationText}
-                  onChange={(e) => setDeleteConfirmationText(e.target.value)}
-                />
-              </div>
-              <div className="flex flex-col gap-3 pt-4">
-                <button 
-                  onClick={() => {
-                    if (deleteConfirmationText === cityToDelete.name.toUpperCase()) {
-                      setCities(cities.filter(c => c.id !== cityToDelete.id));
-                      setShowDeleteModal(false);
-                      setCityToDelete(null);
-                    }
-                  }}
-                  disabled={deleteConfirmationText !== cityToDelete.name.toUpperCase()}
-                  className="w-full bg-red-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-red-100 hover:bg-red-700 transition-all active:scale-95 disabled:opacity-30 disabled:grayscale"
-                >
-                  Confirmar Exclusão Permanente
-                </button>
-                <button onClick={() => setShowDeleteModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors">
-                  DESISTIR E VOLTAR
-                </button>
-              </div>
-            </div>
+      <Modal
+        isOpen={showDeleteModal && !!cityToDelete}
+        onClose={() => setShowDeleteModal(false)}
+        title="Atenção Crítica!"
+        description={`Você está prestes a excluir a unidade ${cityToDelete?.name}.`}
+        icon={<AlertTriangle className="w-10 h-10" />}
+        className="border-red-100"
+      >
+        <div className="text-center space-y-6">
+          <div className="space-y-4">
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-relaxed">
+              Para confirmar, digite o nome da cidade abaixo em <span className="text-red-500">CAIXA ALTA</span>:
+            </p>
+            <input 
+              type="text" 
+              className="w-full px-6 py-4 bg-red-50/30 border border-red-100 rounded-2xl text-center font-black text-red-600 placeholder:text-red-200 focus:outline-none focus:ring-4 focus:ring-red-50 transition-all"
+              placeholder={cityToDelete?.name.toUpperCase()}
+              value={deleteConfirmationText}
+              onChange={(e) => setDeleteConfirmationText(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-3 pt-4">
+            <Button 
+              onClick={handleDeleteCity}
+              disabled={deleteConfirmationText !== cityToDelete?.name.toUpperCase()}
+              className="w-full bg-red-600 shadow-red-100 hover:bg-red-700"
+            >
+              Confirmar Exclusão Permanente
+            </Button>
+            <Button variant="ghost" onClick={() => setShowDeleteModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-gray-600 transition-colors">
+              DESISTIR E VOLTAR
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Ticket, 
   Plus, 
@@ -14,8 +14,6 @@ import {
   ChevronRight, 
   Edit3, 
   Trash2, 
-  ToggleLeft, 
-  ToggleRight,
   PieChart,
   DollarSign,
   AlertCircle,
@@ -24,13 +22,21 @@ import {
   Percent,
   Calculator
 } from 'lucide-react';
-import { mockEvents, mockTeams, mockEventSales } from '../mockData';
-import { Event, EventTeamQuota, EventExpense } from '../types';
+import { api } from '../services/api';
+import { Event, EventTeamQuota, EventExpense, BaseTeam } from '../types';
+import Button from '../components/Button';
+import Modal from '../components/Modal';
+import Dropdown from '../components/Dropdown';
+import DateInput from '../components/DateInput';
+import BooleanInput from '../components/BooleanInput';
+import Grid from '../components/Grid';
 
 const EventsView: React.FC = () => {
-  const [events, setEvents] = useState<Event[]>(mockEvents);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [teams, setTeams] = useState<BaseTeam[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -40,8 +46,30 @@ const EventsView: React.FC = () => {
     ticketQuantity: 0,
     ticketValue: 0,
     expenses: [] as EventExpense[],
-    teamQuotas: mockTeams.map(t => ({ teamId: t.id, quotaValue: 0 }))
+    teamQuotas: [] as EventTeamQuota[]
   });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [eventsData, teamsData] = await Promise.all([
+          api.getEvents(),
+          api.getTeams()
+        ]);
+        setEvents(eventsData);
+        setTeams(teamsData);
+        setFormData(prev => ({
+          ...prev,
+          teamQuotas: teamsData.map(t => ({ teamId: t.id, quotaValue: 0 }))
+        }));
+      } catch (err) {
+        console.error('Failed to fetch events data', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const [newExpense, setNewExpense] = useState({ description: '', amount: 0 });
 
@@ -54,11 +82,12 @@ const EventsView: React.FC = () => {
   }, [formData.ticketQuantity, formData.ticketValue]);
 
   const getEventStats = (event: Event) => {
-    const sales = mockEventSales.filter(s => s.eventId === event.id);
-    const raised = sales.reduce((acc, s) => acc + s.amount, 0);
-    const progress = (raised / event.goalValue) * 100;
+    // In a real app, we would fetch sales for this event
+    // For now, we'll use a placeholder or mock logic if needed
+    const raised = 0; // Placeholder
+    const progress = event.goalValue > 0 ? (raised / event.goalValue) * 100 : 0;
     const netProfit = raised - event.costValue;
-    const ticketsSold = Math.floor(raised / (event.ticketValue || 1));
+    const ticketsSold = event.ticketValue > 0 ? Math.floor(raised / event.ticketValue) : 0;
     return { raised, progress, netProfit, ticketsSold };
   };
 
@@ -66,7 +95,7 @@ const EventsView: React.FC = () => {
     if (!newExpense.description || newExpense.amount <= 0) return;
     setFormData({
       ...formData,
-      expenses: [...formData.expenses, { id: Math.random().toString(36).substr(2, 9), ...newExpense }]
+      expenses: [...formData.expenses, { id: Math.random().toString(36).substr(2, 9), eventId: '', ...newExpense }]
     });
     setNewExpense({ description: '', amount: 0 });
   };
@@ -78,23 +107,69 @@ const EventsView: React.FC = () => {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const costValue = totalExpenses;
-    if (editingEventId) {
-      setEvents(events.map(e => e.id === editingEventId ? { ...e, ...formData, costValue, id: e.id, cityId: e.cityId, isActive: e.isActive } : e));
-    } else {
-      const newEvent: Event = {
-        id: Math.random().toString(36).substr(2, 9),
-        ...formData,
-        costValue,
-        cityId: '1',
-        isActive: true
-      };
-      setEvents([newEvent, ...events]);
+    setLoading(true);
+    try {
+      if (editingEventId) {
+        const updated = await api.updateEvent(editingEventId, {
+          ...formData,
+          costValue,
+          cityId: '1', // Default city for now
+          isActive: true
+        });
+        setEvents(events.map(e => e.id === editingEventId ? updated : e));
+      } else {
+        const newEvent = await api.createEvent({
+          ...formData,
+          costValue,
+          cityId: '1', // Default city for now
+          isActive: true
+        });
+        setEvents([newEvent, ...events]);
+      }
+      setShowModal(false);
+      setEditingEventId(null);
+    } catch (err) {
+      console.error('Failed to save event', err);
+      alert('Erro ao salvar evento');
+    } finally {
+      setLoading(false);
     }
-    setShowModal(false);
-    setEditingEventId(null);
   };
+
+  const handleDeleteEvent = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este evento?')) return;
+    try {
+      await api.deleteEvent(id);
+      setEvents(events.filter(e => e.id !== id));
+    } catch (err) {
+      console.error('Failed to delete event', err);
+    }
+  };
+
+  const handleEditEvent = (event: Event) => {
+    setEditingEventId(event.id);
+    setFormData({
+      name: event.name,
+      date: event.date,
+      goalValue: event.goalValue,
+      showOnDashboard: event.showOnDashboard,
+      ticketQuantity: event.ticketQuantity,
+      ticketValue: event.ticketValue,
+      expenses: event.expenses || [],
+      teamQuotas: event.teamQuotas || teams.map(t => ({ teamId: t.id, quotaValue: 0 }))
+    });
+    setShowModal(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700 pb-20">
@@ -103,26 +178,27 @@ const EventsView: React.FC = () => {
           <h2 className="text-4xl font-black text-gray-900 tracking-tight">Gestão de Eventos</h2>
           <p className="text-gray-500 font-medium">Controle de arrecadação, ingressos e despesas detalhadas.</p>
         </div>
-        <button 
+        <Button 
           onClick={() => {
             setEditingEventId(null);
             setFormData({
-                name: '',
-                date: new Date().toISOString().split('T')[0],
-                goalValue: 0,
-                showOnDashboard: true,
-                ticketQuantity: 0,
-                ticketValue: 0,
-                expenses: [],
-                teamQuotas: mockTeams.map(t => ({ teamId: t.id, quotaValue: 0 }))
+              name: '',
+              date: new Date().toISOString().split('T')[0],
+              goalValue: 0,
+              showOnDashboard: true,
+              ticketQuantity: 0,
+              ticketValue: 0,
+              expenses: [],
+              teamQuotas: teams.map(t => ({ teamId: t.id, quotaValue: 0 }))
             });
             setShowModal(true);
           }}
-          className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-100 active:scale-95 group shrink-0"
+          size="lg"
+          className="shadow-blue-100 shrink-0"
         >
-          <Plus className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+          <Plus className="w-4 h-4 mr-2" />
           Novo Evento
-        </button>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 px-2 lg:px-0">
@@ -144,8 +220,18 @@ const EventsView: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button className="p-2 text-gray-300 hover:text-blue-600 transition-colors"><Edit3 className="w-5 h-5" /></button>
-                    <button className="p-2 text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-5 h-5" /></button>
+                    <button 
+                      onClick={() => handleEditEvent(event)}
+                      className="p-2 text-gray-300 hover:text-blue-600 transition-colors"
+                    >
+                      <Edit3 className="w-5 h-5" />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteEvent(event.id)}
+                      className="p-2 text-gray-300 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
 
@@ -202,224 +288,219 @@ const EventsView: React.FC = () => {
         })}
       </div>
 
-      {/* MODAL NOVO EVENTO / EDIÇÃO */}
-      {showModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 overflow-y-auto">
-          <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-500 my-auto">
-            
-            <div className="px-10 py-8 border-b border-gray-50 flex items-center justify-between bg-white sticky top-0 z-20">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-100">
-                  <Ticket className="w-6 h-6" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-gray-900 leading-none mb-1">{editingEventId ? 'Editar Evento' : 'Novo Evento'}</h3>
-                  <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest">INGRESSOS, GASTOS E METAS</p>
-                </div>
-              </div>
-              <button onClick={() => setShowModal(false)} className="p-2 hover:bg-gray-50 rounded-xl transition-all text-gray-300 hover:text-red-500"><X className="w-7 h-7" /></button>
+      {/* Modal Novo Evento */}
+      <Modal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={editingEventId ? 'Editar Evento' : 'Lançar Novo Evento'}
+        size="lg"
+      >
+        <div className="space-y-12">
+          {/* SEÇÃO 1: DADOS BÁSICOS */}
+          <div className="space-y-8">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+              <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">1. Dados Básicos do Evento</h4>
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome do Evento</label>
+                <input 
+                  type="text" 
+                  className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-3 text-sm font-bold text-gray-900 focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-400 transition-all outline-none shadow-sm"
+                  placeholder="Ex: Almoço de Confraternização"
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                />
+              </div>
+              <DateInput
+                label="Data do Evento"
+                value={formData.date}
+                onChange={val => setFormData({...formData, date: val})}
+              />
+            </div>
+          </div>
 
-            <div className="p-10 space-y-12 overflow-y-auto max-h-[75vh] no-scrollbar">
-              
-              {/* SEÇÃO 1: DADOS BÁSICOS E INGRESSOS */}
-              <div className="space-y-8">
-                <div className="flex items-center gap-3">
-                   <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
-                   <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">1. Definição do Evento e Ingressos</h4>
+          {/* SEÇÃO 2: GASTOS E INVESTIMENTOS */}
+          <div className="space-y-8">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-6 bg-red-500 rounded-full"></div>
+              <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">2. Gastos e Investimentos</h4>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="space-y-4">
+                <div className="p-6 bg-red-50 rounded-[2.5rem] border border-red-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-red-400 uppercase tracking-widest">Total de Gastos:</span>
+                    <span className="text-xl font-black text-red-600">R$ {totalExpenses.toFixed(2)}</span>
+                  </div>
+                  <div className="w-full bg-red-200 h-1.5 rounded-full overflow-hidden">
+                    <div className="bg-red-500 h-full transition-all duration-500" style={{ width: `${Math.min((totalExpenses / (formData.goalValue || 1)) * 100, 100)}%` }}></div>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <div className="md:col-span-2">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">NOME DO EVENTO</label>
-                    <input type="text" placeholder="Ex: Galinhada Beneficente 2024" className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 focus:ring-4 focus:ring-blue-50 outline-none transition-all" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">DATA DO EVENTO</label>
-                    <input type="date" className="w-full px-6 py-5 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-bold text-gray-700 outline-none" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-                  </div>
-                  
-                  <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100/50 space-y-4">
-                    <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 flex items-center gap-2">
-                       <Calculator className="w-3.5 h-3.5" /> Ingressos Gerados
-                    </label>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Qtd Ingressos</label>
                     <input 
                       type="number" 
-                      placeholder="Qtd." 
-                      className="w-full px-5 py-4 bg-white border border-blue-100 rounded-xl text-sm font-black text-blue-700 outline-none"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-3 text-sm font-bold text-gray-900 outline-none"
                       value={formData.ticketQuantity}
                       onChange={e => setFormData({...formData, ticketQuantity: parseInt(e.target.value) || 0})}
                     />
                   </div>
-
-                  <div className="p-6 bg-blue-50/50 rounded-3xl border border-blue-100/50 space-y-4">
-                    <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest ml-1 flex items-center gap-2">
-                       <DollarSign className="w-3.5 h-3.5" /> Valor Unitário
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-300 font-black text-xs">R$</span>
-                      <input 
-                        type="number" 
-                        placeholder="0.00" 
-                        className="w-full pl-10 pr-5 py-4 bg-white border border-blue-100 rounded-xl text-sm font-black text-blue-700 outline-none"
-                        value={formData.ticketValue}
-                        onChange={e => setFormData({...formData, ticketValue: parseFloat(e.target.value) || 0})}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-6 bg-blue-600 rounded-3xl shadow-xl shadow-blue-100 flex flex-col justify-center">
-                    <p className="text-[9px] font-black text-blue-200 uppercase tracking-widest mb-1">Potencial Arrecadação</p>
-                    <p className="text-2xl font-black text-white">R$ {potentialRevenue.toFixed(2)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* SEÇÃO 2: GASTOS DETALHADOS */}
-              <div className="space-y-8">
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="w-1 h-6 bg-red-500 rounded-full"></div>
-                      <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">2. Detalhamento de Gastos (Custos)</h4>
-                   </div>
-                   <div className="flex items-center gap-2 px-4 py-2 bg-red-50 rounded-xl border border-red-100">
-                      <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Gasto Total:</span>
-                      <span className="text-xs font-black text-red-700">R$ {totalExpenses.toFixed(2)}</span>
-                   </div>
-                </div>
-
-                <div className="bg-gray-50 rounded-[2rem] p-8 space-y-6">
-                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                    <div className="sm:col-span-2">
-                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">DESCRIÇÃO DO GASTO</label>
-                      <input 
-                        type="text" 
-                        placeholder="Ex: Aluguel de Tendas, Compra de Bebidas..." 
-                        className="w-full px-5 py-4 bg-white border border-gray-100 rounded-xl text-sm font-bold text-gray-700 outline-none focus:ring-4 focus:ring-blue-50"
-                        value={newExpense.description}
-                        onChange={e => setNewExpense({...newExpense, description: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">VALOR R$</label>
-                      <input 
-                        type="number" 
-                        className="w-full px-5 py-4 bg-white border border-gray-100 rounded-xl text-sm font-black text-gray-700 outline-none"
-                        value={newExpense.amount}
-                        onChange={e => setNewExpense({...newExpense, amount: parseFloat(e.target.value) || 0})}
-                      />
-                    </div>
-                    <button 
-                      onClick={handleAddExpense}
-                      className="bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100"
-                    >
-                      <Plus className="w-4 h-4" /> Adicionar Gasto
-                    </button>
-                  </div>
-
                   <div className="space-y-2">
-                    {formData.expenses.map(exp => (
-                      <div key={exp.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 group animate-in slide-in-from-left-2 duration-300">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center">
-                             <Receipt className="w-4 h-4" />
-                          </div>
-                          <span className="text-sm font-bold text-gray-700">{exp.description}</span>
-                        </div>
-                        <div className="flex items-center gap-6">
-                          <span className="text-sm font-black text-red-500">R$ {exp.amount.toFixed(2)}</span>
-                          <button onClick={() => handleRemoveExpense(exp.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                    {formData.expenses.length === 0 && (
-                      <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-3xl">
-                        <Receipt className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                        <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest italic">Nenhum gasto detalhado ainda.</p>
-                      </div>
-                    )}
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Valor Unitário</label>
+                    <input 
+                      type="number" 
+                      className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-3 text-sm font-bold text-gray-900 outline-none"
+                      value={formData.ticketValue}
+                      onChange={e => setFormData({...formData, ticketValue: parseFloat(e.target.value) || 0})}
+                    />
                   </div>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
+                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Potencial Bruto:</span>
+                  <span className="text-sm font-black text-blue-600">R$ {potentialRevenue.toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* SEÇÃO 3: METAS E EQUIPES */}
-              <div className="space-y-8">
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="w-1 h-6 bg-emerald-500 rounded-full"></div>
-                      <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">3. Meta Geral e Cotas por Equipe</h4>
-                   </div>
-                   <div className="flex items-center gap-4 bg-gray-50 px-5 py-2.5 rounded-2xl border border-gray-100">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Dashboard:</span>
-                      <button onClick={() => setFormData({...formData, showOnDashboard: !formData.showOnDashboard})} className="transition-all">
-                        {formData.showOnDashboard ? <ToggleRight className="w-8 h-8 text-blue-600" /> : <ToggleLeft className="w-8 h-8 text-gray-300" />}
-                      </button>
-                   </div>
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input 
+                    type="text" 
+                    placeholder="Descrição do Gasto"
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs font-bold text-gray-900 outline-none"
+                    value={newExpense.description}
+                    onChange={e => setNewExpense({...newExpense, description: e.target.value})}
+                  />
+                  <div className="flex gap-2">
+                    <input 
+                      type="number" 
+                      placeholder="Valor R$"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs font-bold text-gray-900 outline-none"
+                      value={newExpense.amount || ''}
+                      onChange={e => setNewExpense({...newExpense, amount: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
+                  <Button 
+                    onClick={handleAddExpense}
+                    variant="outline"
+                    className="sm:col-span-2"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> Adicionar Gasto
+                  </Button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="p-8 bg-emerald-50 rounded-[2.5rem] border border-emerald-100 space-y-4">
-                    <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1 flex items-center gap-2">
-                       <Target className="w-4 h-4" /> Meta Total de Arrecadação (Bruto)
-                    </label>
-                    <div className="relative">
-                       <span className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-300 font-black text-lg">R$</span>
-                       <input 
-                         type="number" 
-                         className="w-full pl-16 pr-8 py-6 bg-white border border-emerald-100 rounded-3xl text-xl font-black text-emerald-700 outline-none focus:ring-8 focus:ring-emerald-100 transition-all"
-                         value={formData.goalValue}
-                         onChange={e => setFormData({...formData, goalValue: parseFloat(e.target.value) || 0})}
-                       />
+                <div className="space-y-2">
+                  {formData.expenses.map(exp => (
+                    <div key={exp.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 group animate-in slide-in-from-left-2 duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center">
+                           <Receipt className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-bold text-gray-700">{exp.description}</span>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <span className="text-sm font-black text-red-500">R$ {exp.amount.toFixed(2)}</span>
+                        <button onClick={() => handleRemoveExpense(exp.id)} className="p-2 text-gray-300 hover:text-red-500 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest px-2 italic">
-                       Dica: Sua meta deve ser maior que o gasto real (R$ {totalExpenses.toFixed(2)}).
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 ml-1">Distribuir Meta entre as Equipes Base</p>
-                    <div className="max-h-[250px] overflow-y-auto no-scrollbar space-y-3 pr-2">
-                      {formData.teamQuotas.map((quota, idx) => {
-                        const team = mockTeams.find(t => t.id === quota.teamId);
-                        return (
-                          <div key={quota.teamId} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-white transition-all">
-                            <span className="text-xs font-bold text-gray-700">{team?.name}</span>
-                            <div className="relative w-36">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 font-black text-[9px]">R$</span>
-                              <input 
-                                type="number" 
-                                className="w-full pl-8 pr-3 py-2 bg-white border border-gray-100 rounded-xl text-xs font-black text-gray-900 outline-none"
-                                value={quota.quotaValue}
-                                onChange={(e) => {
-                                  const newQuotas = [...formData.teamQuotas];
-                                  newQuotas[idx].quotaValue = parseFloat(e.target.value) || 0;
-                                  setFormData({...formData, teamQuotas: newQuotas});
-                                }}
-                              />
-                            </div>
-                          </div>
-                        );
-                      })}
+                  ))}
+                  {formData.expenses.length === 0 && (
+                    <div className="text-center py-10 border-2 border-dashed border-gray-200 rounded-3xl">
+                      <Receipt className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                      <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest italic">Nenhum gasto detalhado ainda.</p>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
-            </div>
-
-            <div className="px-10 py-8 bg-gray-50 border-t border-gray-50 flex items-center justify-end gap-6 z-20">
-              <button onClick={() => setShowModal(false)} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-red-500 transition-colors">CANCELAR</button>
-              <button 
-                onClick={handleSave}
-                disabled={!formData.name || formData.goalValue <= 0}
-                className="bg-blue-600 text-white px-12 py-5 rounded-[1.5rem] font-black text-xs uppercase tracking-[0.2em] shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center gap-3 active:scale-95 disabled:opacity-50"
-              >
-                <Save className="w-5 h-5" /> {editingEventId ? 'SALVAR ALTERAÇÕES' : 'LANÇAR EVENTO AGORA'}
-              </button>
             </div>
           </div>
+
+          {/* SEÇÃO 3: METAS E EQUIPES */}
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+               <div className="flex items-center gap-3">
+                  <div className="w-1 h-6 bg-emerald-500 rounded-full"></div>
+                  <h4 className="text-sm font-black text-gray-900 uppercase tracking-widest">3. Meta Geral e Cotas por Equipe</h4>
+               </div>
+               <BooleanInput
+                 label="Exibir no Dashboard"
+                 value={formData.showOnDashboard}
+                 onChange={val => setFormData({...formData, showOnDashboard: val})}
+               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="p-8 bg-emerald-50 rounded-[2.5rem] border border-emerald-100 space-y-4">
+                <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1 flex items-center gap-2">
+                   <Target className="w-4 h-4" /> Meta Total de Arrecadação (Bruto)
+                </label>
+                <div className="relative">
+                   <span className="absolute left-6 top-1/2 -translate-y-1/2 text-emerald-300 font-black text-lg">R$</span>
+                   <input 
+                     type="number" 
+                     className="w-full pl-16 pr-8 py-6 bg-white border border-emerald-100 rounded-3xl text-xl font-black text-emerald-700 outline-none focus:ring-8 focus:ring-emerald-100 transition-all"
+                     value={formData.goalValue}
+                     onChange={e => setFormData({...formData, goalValue: parseFloat(e.target.value) || 0})}
+                   />
+                </div>
+                <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest px-2 italic">
+                   Dica: Sua meta deve ser maior que o gasto real (R$ {totalExpenses.toFixed(2)}).
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 ml-1">Distribuir Meta entre as Equipes Base</p>
+                <div className="max-h-[250px] overflow-y-auto no-scrollbar space-y-3 pr-2">
+                  {formData.teamQuotas.map((quota, idx) => {
+                    const team = teams.find(t => t.id === quota.teamId);
+                    return (
+                      <div key={quota.teamId} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 hover:bg-white transition-all">
+                        <span className="text-xs font-bold text-gray-700">{team?.name}</span>
+                        <div className="relative w-36">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 font-black text-[9px]">R$</span>
+                          <input 
+                            type="number" 
+                            className="w-full pl-8 pr-3 py-2 bg-white border border-gray-100 rounded-xl text-xs font-black text-gray-900 outline-none"
+                            value={quota.quotaValue}
+                            onChange={(e) => {
+                              const newQuotas = [...formData.teamQuotas];
+                              newQuotas[idx].quotaValue = parseFloat(e.target.value) || 0;
+                              setFormData({...formData, teamQuotas: newQuotas});
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-8 border-t border-gray-50 flex flex-col sm:flex-row items-center justify-end gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowModal(false)}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSave}
+              disabled={!formData.name || formData.goalValue <= 0}
+              className="w-full sm:w-auto"
+            >
+              <Save className="w-4 h-4 mr-2" />
+              {editingEventId ? 'Salvar Alterações' : 'Lançar Evento Agora'}
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };

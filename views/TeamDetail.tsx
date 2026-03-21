@@ -1,8 +1,8 @@
 
-import React, { useState } from 'react';
-import { ArrowLeft, UserPlus, Users, Calendar, MapPin, Search, Trash2, Edit } from 'lucide-react';
-import { mockTeams, mockMembers } from '../mockData';
-import { MemberStatus } from '../types';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, UserPlus, Users, Calendar, MapPin, Search, Trash2, Edit, X } from 'lucide-react';
+import { api } from '../services/api';
+import { MemberStatus, BaseTeam, Member } from '../types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface TeamDetailProps {
@@ -12,12 +12,28 @@ interface TeamDetailProps {
 }
 
 const TeamDetail: React.FC<TeamDetailProps> = ({ teamId, onBack, onOpenMember }) => {
-  const team = mockTeams.find(t => t.id === teamId);
-  const teamMembers = mockMembers.filter(m => m.teamId === teamId);
+  const [team, setTeam] = useState<BaseTeam & { members: Member[] } | null>(null);
+  const [waitingMembers, setWaitingMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddMember, setShowAddMember] = useState(false);
 
-  // Members waiting (only "Aguardando" can be added)
-  const waitingMembers = mockMembers.filter(m => m.status === MemberStatus.AGUARDANDO && !m.teamId);
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [teamData, allMembers] = await Promise.all([
+          api.getTeam(teamId),
+          api.getMembers()
+        ]);
+        setTeam(teamData);
+        setWaitingMembers(allMembers.filter(m => m.status === MemberStatus.AGUARDANDO && !m.teamId));
+      } catch (err) {
+        console.error('Failed to fetch team details', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [teamId]);
 
   const ageData = [
     { name: '0-20', value: 2 },
@@ -35,6 +51,7 @@ const TeamDetail: React.FC<TeamDetailProps> = ({ teamId, onBack, onOpenMember })
     { month: 'Jun', count: 3 },
   ];
 
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
   if (!team) return <div>Equipe não encontrada</div>;
 
   return (
@@ -91,10 +108,10 @@ const TeamDetail: React.FC<TeamDetailProps> = ({ teamId, onBack, onOpenMember })
         {/* Member List */}
         <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="font-bold text-gray-800">Membros da Equipe ({teamMembers.length})</h3>
+            <h3 className="font-bold text-gray-800">Membros da Equipe ({team.members.length})</h3>
           </div>
           <div className="divide-y divide-gray-50">
-            {teamMembers.map(member => (
+            {team.members.map(member => (
               <div 
                 key={member.id} 
                 className="p-4 flex items-center justify-between hover:bg-gray-50 cursor-pointer"
@@ -124,7 +141,7 @@ const TeamDetail: React.FC<TeamDetailProps> = ({ teamId, onBack, onOpenMember })
           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-800">Adicionar Membro à Equipe</h3>
-              <button onClick={() => setShowAddMember(false)}><XIcon className="w-6 h-6 text-gray-400" /></button>
+              <button onClick={() => setShowAddMember(false)}><X className="w-6 h-6 text-gray-400" /></button>
             </div>
             <div className="p-6 overflow-y-auto">
               <p className="text-sm text-gray-500 mb-4">Apenas membros com status <strong>Aguardando</strong> estão disponíveis para vinculação.</p>
@@ -156,11 +173,5 @@ const TeamDetail: React.FC<TeamDetailProps> = ({ teamId, onBack, onOpenMember })
     </div>
   );
 };
-
-const XIcon = ({ className }: { className: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-  </svg>
-);
 
 export default TeamDetail;

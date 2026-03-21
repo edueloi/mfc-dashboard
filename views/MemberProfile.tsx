@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ArrowLeft, 
   MapPin, 
@@ -14,7 +14,8 @@ import {
   Edit,
   UserCheck
 } from 'lucide-react';
-import { mockMembers } from '../mockData';
+import { api } from '../services/api';
+import { Member } from '../types';
 
 interface MemberProfileProps {
   memberId: string;
@@ -22,9 +23,25 @@ interface MemberProfileProps {
 }
 
 const MemberProfile: React.FC<MemberProfileProps> = ({ memberId, onBack }) => {
-  const member = mockMembers.find(m => m.id === memberId);
+  const [member, setMember] = useState<Member | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pessoal' | 'endereco' | 'saude' | 'historico' | 'acesso'>('pessoal');
 
+  useEffect(() => {
+    const fetchMember = async () => {
+      try {
+        const data = await api.getMember(memberId);
+        setMember(data);
+      } catch (err) {
+        console.error('Failed to fetch member', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMember();
+  }, [memberId]);
+
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
   if (!member) return <div>Membro não encontrado</div>;
 
   const tabs = [

@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, 
   DollarSign, 
@@ -21,7 +21,9 @@ import {
   ArrowRight,
   ShoppingCart,
   Receipt,
-  Check
+  Check,
+  Search,
+  Printer
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -33,8 +35,10 @@ import {
   ResponsiveContainer, 
   Cell 
 } from 'recharts';
-import { mockTeams, mockMembers, mockPayments, mockEventSales, mockEvents } from '../mockData';
-import { Payment, Member, EventSale, Event } from '../types';
+import { api } from '../services/api';
+import { Payment, Member, EventSale, Event, BaseTeam } from '../types';
+import Grid from '../components/Grid';
+import Button from '../components/Button';
 
 interface MyTeamViewProps {
   teamId: string;
@@ -58,11 +62,36 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, onOpenMember })
     observation: ''
   });
   
-  const [membersState] = useState<Member[]>(mockMembers.filter(m => m.teamId === teamId));
-  const team = mockTeams.find(t => t.id === teamId);
-  const [localPayments, setLocalPayments] = useState<Payment[]>(mockPayments.filter(p => p.teamId === teamId));
-  const [localSales] = useState<EventSale[]>(mockEventSales.filter(s => s.teamId === teamId));
-  const [events] = useState<Event[]>(mockEvents);
+  const [membersState, setMembersState] = useState<Member[]>([]);
+  const [team, setTeam] = useState<BaseTeam | null>(null);
+  const [localPayments, setLocalPayments] = useState<Payment[]>([]);
+  const [localSales, setLocalSales] = useState<EventSale[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [teamData, allPayments, allSales, allEvents] = await Promise.all([
+          api.getTeam(teamId),
+          api.getPayments(),
+          api.getEventSales(),
+          api.getEvents()
+        ]);
+        
+        setTeam(teamData);
+        setMembersState(teamData.members);
+        setLocalPayments(allPayments.filter(p => p.teamId === teamId));
+        setLocalSales(allSales.filter(s => s.teamId === teamId));
+        setEvents(allEvents);
+      } catch (err) {
+        console.error('Failed to fetch team data', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [teamId]);
 
   const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
   const shortMonths = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -156,6 +185,7 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, onOpenMember })
     setPaymentForm({ months: [], year: 2026, amountPerMonth: 50, observation: '' });
   };
 
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
   if (!team) return <div className="p-10 text-center font-black">EQUIPE NÃO ENCONTRADA</div>;
 
   return (
@@ -217,120 +247,122 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, onOpenMember })
 
       {activeTab === 'mensalidades' && (
         <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-          {/* RESUMO E FILTROS */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-             <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-6">
-                <h3 className="text-xl font-black text-gray-900 tracking-tight">Filtro de Visão</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Ano Exercício</label>
-                    <select className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs font-black outline-none" value={viewYear} onChange={(e) => setViewYear(parseInt(e.target.value))}>
-                      {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
+      {/* RESUMO E FILTROS */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+         <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-6 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50/50 rounded-full -mr-12 -mt-12 group-hover:scale-110 transition-transform"></div>
+            <h3 className="text-sm font-black text-gray-900 tracking-tight relative z-10">Filtro de Visão</h3>
+            <div className="grid grid-cols-2 gap-4 relative z-10">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Ano Exercício</label>
+                <select className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-black outline-none focus:ring-4 focus:ring-blue-500/5 transition-all" value={viewYear} onChange={(e) => setViewYear(parseInt(e.target.value))}>
+                  {[2024, 2025, 2026, 2027].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Mês Atual</label>
+                <select className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-black outline-none focus:ring-4 focus:ring-blue-500/5 transition-all" value={viewMonth} onChange={(e) => setViewMonth(parseInt(e.target.value))}>
+                  {monthNames.map((n, i) => <option key={i} value={i+1}>{n}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="p-4 bg-blue-50/50 rounded-2xl border border-blue-100/50 flex items-center justify-between relative z-10">
+                <BarChart3 className="w-5 h-5 text-blue-600" />
+                <div className="text-right">
+                    <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none">Esperado no Mês</p>
+                    <p className="text-lg font-black text-blue-700">R$ {(membersState.length * 50).toFixed(2)}</p>
+                </div>
+            </div>
+         </div>
+
+         <div className="bg-emerald-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-emerald-900/10 relative overflow-hidden group">
+            <TrendingUp className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform" />
+            <p className="text-[10px] font-black text-emerald-200 uppercase tracking-[0.2em] mb-1">Arrecadado em {monthNames[viewMonth-1]}</p>
+            <h3 className="text-4xl font-black tracking-tighter leading-none">R$ {financeStats.monthlyTotal.toFixed(2)}</h3>
+            <div className="mt-8 pt-6 border-t border-emerald-500/30 flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-widest">Total {viewYear}:</span>
+                <span className="text-xl font-black">R$ {financeStats.yearlyTotal.toFixed(2)}</span>
+            </div>
+         </div>
+
+         <div className="bg-white p-8 rounded-[2.5rem] border border-red-100 shadow-xl shadow-red-900/5 relative overflow-hidden group">
+            <AlertTriangle className="absolute -right-4 -bottom-4 w-32 h-32 text-red-500 opacity-5 group-hover:scale-110 transition-transform" />
+            <p className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em] mb-1">Pendências Acumuladas</p>
+            <h3 className="text-4xl font-black text-red-600 tracking-tighter leading-none">R$ {financeStats.pendingAmount.toFixed(2)}</h3>
+            <p className="mt-4 text-[9px] font-bold text-gray-400 italic">Zé, esse é o valor que ainda falta entrar no caixa este ano.</p>
+         </div>
+      </div>
+
+      {/* LISTA DE MENSALIDADES COM TIMELINE */}
+      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
+         <header className="p-8 border-b border-gray-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+               <h3 className="text-xl font-black text-gray-900 tracking-tight">Fluxo de Caixa da Equipe</h3>
+               <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Legenda: <span className="text-emerald-500">● Pago</span> | <span className="text-red-500">● Atraso</span> | <span className="text-gray-300">○ Futuro</span></p>
+            </div>
+            <div className="px-4 py-2 bg-gray-50 rounded-xl border border-gray-100 text-[9px] font-black text-gray-500 uppercase tracking-widest shadow-sm">
+               {groupedMembers.length} Unidades Familiares
+            </div>
+         </header>
+
+         <div className="divide-y divide-gray-50">
+            {groupedMembers.map((group, idx) => (
+              <div key={idx} className="p-8 flex flex-col xl:flex-row xl:items-center justify-between gap-8 hover:bg-blue-50/20 transition-all group">
+                <div className="flex items-center gap-6 min-w-[250px]">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-sm ${group.atrasos === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                    {group.type === 'couple' ? <Heart className="w-7 h-7" /> : <Users className="w-7 h-7" />}
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Mês Atual</label>
-                    <select className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs font-black outline-none" value={viewMonth} onChange={(e) => setViewMonth(parseInt(e.target.value))}>
-                      {monthNames.map((n, i) => <option key={i} value={i+1}>{n}</option>)}
-                    </select>
+                    <h4 className="text-lg font-black text-gray-900 leading-none group-hover:text-blue-700 transition-colors tracking-tight">{group.displayName}</h4>
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                      {group.atrasos === 0 ? 'Em dia com a tesouraria' : `${group.atrasos} meses pendentes`}
+                    </p>
                   </div>
                 </div>
-                <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 flex items-center justify-between">
-                    <BarChart3 className="w-5 h-5 text-blue-600" />
-                    <div className="text-right">
-                        <p className="text-[9px] font-black text-blue-400 uppercase tracking-widest leading-none">Esperado no Mês</p>
-                        <p className="text-lg font-black text-blue-700">R$ {(membersState.length * 50).toFixed(2)}</p>
-                    </div>
-                </div>
-             </div>
 
-             <div className="bg-emerald-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-emerald-100 relative overflow-hidden group">
-                <TrendingUp className="absolute -right-4 -bottom-4 w-32 h-32 opacity-10 group-hover:scale-110 transition-transform" />
-                <p className="text-[10px] font-black text-emerald-200 uppercase tracking-[0.2em] mb-1">Arrecadado em {monthNames[viewMonth-1]}</p>
-                <h3 className="text-4xl font-black tracking-tighter leading-none">R$ {financeStats.monthlyTotal.toFixed(2)}</h3>
-                <div className="mt-8 pt-6 border-t border-emerald-500/30 flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-widest">Total {viewYear}:</span>
-                    <span className="text-xl font-black">R$ {financeStats.yearlyTotal.toFixed(2)}</span>
-                </div>
-             </div>
+                {/* LINHA DO TEMPO JAN-DEZ */}
+                <div className="flex-1 overflow-x-auto no-scrollbar py-2">
+                  <div className="flex items-center gap-2 min-w-[400px]">
+                    {group.monthsStatus.map((isPaid: boolean, mIdx: number) => {
+                      const monthNum = mIdx + 1;
+                      const isFuture = monthNum > viewMonth;
+                      
+                      let bgColor = 'bg-gray-100';
+                      let textColor = 'text-gray-400';
+                      if (isPaid) { bgColor = 'bg-emerald-500'; textColor = 'text-white'; }
+                      else if (!isFuture) { bgColor = 'bg-red-500'; textColor = 'text-white'; }
 
-             <div className="bg-white p-8 rounded-[2.5rem] border border-red-100 shadow-xl shadow-red-50 relative overflow-hidden group">
-                <AlertTriangle className="absolute -right-4 -bottom-4 w-32 h-32 text-red-500 opacity-5 group-hover:scale-110 transition-transform" />
-                <p className="text-[10px] font-black text-red-400 uppercase tracking-[0.2em] mb-1">Pendências Acumuladas</p>
-                <h3 className="text-4xl font-black text-red-600 tracking-tighter leading-none">R$ {financeStats.pendingAmount.toFixed(2)}</h3>
-                <p className="mt-4 text-[9px] font-bold text-gray-400 italic">Zé, esse é o valor que ainda falta entrar no caixa este ano.</p>
-             </div>
-          </div>
-
-          {/* LISTA DE MENSALIDADES COM TIMELINE */}
-          <div className="bg-white rounded-[3rem] border border-gray-100 shadow-sm overflow-hidden">
-             <header className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/20">
-                <div>
-                   <h3 className="text-xl font-black text-gray-900 tracking-tight">Fluxo de Caixa da Equipe</h3>
-                   <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Legenda: <span className="text-emerald-500">● Pago</span> | <span className="text-red-500">● Atraso</span> | <span className="text-gray-300">○ Futuro</span></p>
-                </div>
-                <div className="px-4 py-2 bg-white rounded-xl border border-gray-100 text-[9px] font-black text-gray-500 uppercase tracking-widest shadow-sm">
-                   {groupedMembers.length} Unidades Familiares
-                </div>
-             </header>
-
-             <div className="divide-y divide-gray-50">
-                {groupedMembers.map((group, idx) => (
-                  <div key={idx} className="p-8 flex flex-col xl:flex-row xl:items-center justify-between gap-8 hover:bg-gray-50/50 transition-all">
-                    <div className="flex items-center gap-6 min-w-[250px]">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${group.atrasos === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
-                        {group.type === 'couple' ? <Heart className="w-7 h-7" /> : <Users className="w-7 h-7" />}
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-lg font-black text-gray-900 leading-none">{group.displayName}</h4>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                          {group.atrasos === 0 ? 'Em dia com a tesouraria' : `${group.atrasos} meses pendentes`}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* LINHA DO TEMPO JAN-DEZ */}
-                    <div className="flex-1 overflow-x-auto no-scrollbar">
-                      <div className="flex items-center gap-2 min-w-[400px]">
-                        {group.monthsStatus.map((isPaid: boolean, mIdx: number) => {
-                          const monthNum = mIdx + 1;
-                          const isFuture = monthNum > viewMonth;
-                          const isPast = monthNum < viewMonth;
-                          
-                          let bgColor = 'bg-gray-100';
-                          let textColor = 'text-gray-400';
-                          if (isPaid) { bgColor = 'bg-emerald-500'; textColor = 'text-white'; }
-                          else if (!isFuture) { bgColor = 'bg-red-500'; textColor = 'text-white'; }
-
-                          return (
-                            <div key={mIdx} className="flex flex-col items-center gap-1 flex-1">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[8px] font-black uppercase transition-all shadow-sm ${bgColor} ${textColor}`}>
-                                {shortMonths[mIdx]}
-                              </div>
-                              <div className={`w-1 h-1 rounded-full ${isPaid ? 'bg-emerald-400' : isFuture ? 'bg-gray-200' : 'bg-red-400 animate-pulse'}`}></div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <button 
-                        onClick={() => {
-                          setPaymentForm({ ...paymentForm, year: viewYear, months: [viewMonth], observation: '' });
-                          setSelectedForPayment({ memberIds: group.members.map(m => m.id), displayName: group.displayName });
-                          setShowPayModal(true);
-                        }}
-                        className="px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center gap-2"
-                      >
-                        <Plus className="w-4 h-4" /> Lançar Pagamento
-                      </button>
-                    </div>
+                      return (
+                        <div key={mIdx} className="flex flex-col items-center gap-1.5 flex-1">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[8px] font-black uppercase transition-all shadow-sm ${bgColor} ${textColor}`}>
+                            {shortMonths[mIdx]}
+                          </div>
+                          <div className={`w-1 h-1 rounded-full ${isPaid ? 'bg-emerald-400' : isFuture ? 'bg-gray-200' : 'bg-red-400 animate-pulse'}`}></div>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-             </div>
-          </div>
-        </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Button 
+                    variant="primary"
+                    size="md"
+                    onClick={() => {
+                      setPaymentForm({ ...paymentForm, year: viewYear, months: [viewMonth], observation: '' });
+                      setSelectedForPayment({ memberIds: group.members.map(m => m.id), displayName: group.displayName });
+                      setShowPayModal(true);
+                    }}
+                    className="shadow-xl shadow-blue-100"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> LANÇAR
+                  </Button>
+                </div>
+              </div>
+            ))}
+         </div>
+      </div>
+    </div>
       )}
 
       {activeTab === 'eventos' && (
@@ -390,44 +422,53 @@ const MyTeamView: React.FC<MyTeamViewProps> = ({ teamId, userId, onOpenMember })
       )}
 
       {activeTab === 'historico' && (
-        <div className="bg-white rounded-[3rem] border border-gray-100 shadow-sm overflow-hidden animate-in slide-in-from-left-4 duration-500">
-           <header className="p-8 border-b border-gray-50 bg-gray-50/20">
-              <h3 className="text-xl font-black text-gray-900 tracking-tight">Extrato Detalhado</h3>
-              <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Últimos 20 lançamentos da equipe</p>
+        <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden animate-in slide-in-from-left-4 duration-500">
+           <header className="p-8 border-b border-gray-50 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-gray-900 tracking-tight">Extrato Detalhado</h3>
+                <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Últimos lançamentos da equipe</p>
+              </div>
+              <Button variant="outline" size="sm" className="flex items-center gap-2">
+                <Printer className="w-4 h-4" /> EXPORTAR
+              </Button>
            </header>
-           <div className="overflow-x-auto no-scrollbar">
-              <table className="w-full text-left">
-                 <thead>
-                    <tr className="bg-gray-50/50">
-                       <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">MFCista</th>
-                       <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Referência</th>
-                       <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Data Lanç.</th>
-                       <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest">Valor</th>
-                       <th className="px-8 py-5 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Status</th>
-                    </tr>
-                 </thead>
-                 <tbody className="divide-y divide-gray-50">
-                    {localPayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map(p => {
-                       const member = membersState.find(m => m.id === p.memberId);
-                       return (
-                          <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                             <td className="px-8 py-4">
-                                <div className="flex items-center gap-3">
-                                   <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black">{member?.name.substring(0, 1)}</div>
-                                   <span className="text-sm font-bold text-gray-800">{member?.name}</span>
-                                </div>
-                             </td>
-                             <td className="px-8 py-4 text-sm font-black text-gray-500">{p.referenceMonth}</td>
-                             <td className="px-8 py-4 text-sm font-medium text-gray-400">{new Date(p.date).toLocaleDateString('pt-BR')}</td>
-                             <td className="px-8 py-4 text-sm font-black text-gray-900">R$ {p.amount.toFixed(2)}</td>
-                             <td className="px-8 py-4 text-center">
-                                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase rounded-lg">Confirmado</span>
-                             </td>
-                          </tr>
-                       );
-                    })}
-                 </tbody>
-              </table>
+           <div className="p-2">
+              <Grid<any>
+                data={localPayments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())}
+                columns={[
+                  {
+                    header: 'MFCista',
+                    accessor: (row: any) => {
+                      const member = membersState.find(m => m.id === row.memberId);
+                      return (
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center text-[10px] font-black">{member?.name.substring(0, 1)}</div>
+                          <span className="text-xs font-black text-gray-800 tracking-tight">{member?.name}</span>
+                        </div>
+                      );
+                    }
+                  },
+                  {
+                    header: 'Referência',
+                    accessor: (row: any) => <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest">{row.referenceMonth}</span>
+                  },
+                  {
+                    header: 'Data Lanç.',
+                    accessor: (row: any) => <span className="text-[11px] font-bold text-gray-400 uppercase tracking-tight">{new Date(row.date).toLocaleDateString('pt-BR')}</span>
+                  },
+                  {
+                    header: 'Valor',
+                    accessor: (row: any) => <span className="text-[11px] font-black text-gray-900 tracking-tight">R$ {row.amount.toFixed(2)}</span>
+                  },
+                  {
+                    header: 'Status',
+                    className: 'text-center',
+                    accessor: () => (
+                      <span className="px-3 py-1 bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase rounded-lg border border-emerald-200/50">Confirmado</span>
+                    )
+                  }
+                ]}
+              />
            </div>
         </div>
       )}

@@ -11,6 +11,7 @@ import {
   X, 
   LogOut,
   ChevronRight,
+  ChevronLeft,
   UserPlus,
   DollarSign,
   UserCheck,
@@ -30,8 +31,9 @@ import FinanceView from './views/Finance';
 import GeneralLedger from './views/GeneralLedger';
 import EventsView from './views/Events';
 import Login from './views/Login';
-import { UserRoleType, User as UserType } from './types';
-import { mockCities } from './mockData';
+import Button from './components/Button';
+import { UserRoleType, User as UserType, City } from './types';
+import { api } from './services/api';
 
 type View = 'dashboard' | 'mfcistas' | 'equipes' | 'usuarios' | 'permissoes' | 'cidades' | 'perfil-membro' | 'detalhe-equipe' | 'minha-equipe' | 'financeiro' | 'livro-caixa' | 'eventos';
 
@@ -39,9 +41,23 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserType | null>(null);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1024);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [selectedCityId, setSelectedCityId] = useState<string>('1');
+  const [cities, setCities] = useState<City[]>([]);
+
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        const data = await api.getCities();
+        setCities(data);
+      } catch (err) {
+        console.error('Failed to fetch cities', err);
+      }
+    };
+    fetchCities();
+  }, []);
 
   useEffect(() => {
     const handleResize = () => {
@@ -58,7 +74,7 @@ const App: React.FC = () => {
 
   if (!currentUser) return <Login onLogin={(user) => setCurrentUser(user)} />;
 
-  const currentCity = mockCities.find(c => c.id === selectedCityId) || mockCities[0];
+  const currentCity = cities.find(c => c.id === selectedCityId) || cities[0] || { name: '...', uf: '..' };
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard, view: 'dashboard' as View },
@@ -113,34 +129,76 @@ const App: React.FC = () => {
   return (
     <div className="h-screen w-screen bg-[#F8FAFC] flex font-sans overflow-hidden">
       {sidebarOpen && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-100 shadow-2xl lg:shadow-none transform transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:h-full flex-shrink-0`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 ${sidebarCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-100 shadow-2xl lg:shadow-none transform transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:static lg:h-full flex-shrink-0`}>
         <div className="h-full flex flex-col">
-          <div className="p-8 flex items-center justify-between flex-shrink-0">
+          <div className={`p-6 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} flex-shrink-0`}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-600 rounded-[1.2rem] flex items-center justify-center text-white font-black shadow-lg shadow-blue-100 rotate-3">M</div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tighter">MFC Gestão</h1>
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-blue-100">M</div>
+              {!sidebarCollapsed && <h1 className="text-xl font-black text-slate-900 tracking-tighter">MFC Gestão</h1>}
             </div>
-            <button className="lg:hidden p-2 hover:bg-slate-50 rounded-xl transition-colors" onClick={() => setSidebarOpen(false)}><X className="w-6 h-6 text-slate-400" /></button>
+            {!sidebarCollapsed && (
+              <button className="lg:hidden p-2 hover:bg-slate-50 rounded-xl transition-colors" onClick={() => setSidebarOpen(false)}>
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            )}
           </div>
-          <nav className="flex-1 px-4 space-y-1.5 overflow-y-auto no-scrollbar py-2">
+
+          <div className="px-4 mb-4">
+            <button 
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden lg:flex w-full items-center justify-center p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-all"
+            >
+              {sidebarCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+            </button>
+          </div>
+
+          <nav className="flex-1 space-y-1 overflow-y-auto no-scrollbar py-4">
             {filteredNav.map((item) => (
-              <button key={item.name} onClick={() => handleNavigate(item.view)} className={`w-full flex items-center gap-3.5 px-5 py-3.5 rounded-[1.5rem] text-sm font-bold transition-all duration-200 group ${currentView === item.view ? 'bg-blue-600 text-white shadow-xl shadow-blue-100 scale-[1.02]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}>
-                <item.icon className={`w-5 h-5 transition-transform duration-200 ${currentView === item.view ? 'text-white' : 'text-slate-400 group-hover:scale-110 group-hover:text-blue-500'}`} />
-                <span className="flex-1 text-left tracking-tight">{item.name}</span>
-                {currentView === item.view && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+              <button 
+                key={item.name} 
+                onClick={() => handleNavigate(item.view)} 
+                className={`
+                  w-full flex items-center gap-4 px-6 py-3.5 text-sm font-bold transition-all duration-200 group relative
+                  ${currentView === item.view 
+                    ? 'text-blue-600 bg-blue-50/30' 
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50/50'
+                  }
+                  ${sidebarCollapsed ? 'justify-center px-0' : ''}
+                `}
+                title={sidebarCollapsed ? item.name : ''}
+              >
+                {currentView === item.view && (
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600 rounded-r-full"></div>
+                )}
+                <item.icon className={`w-5 h-5 transition-all duration-200 ${currentView === item.view ? 'text-blue-600 scale-110' : 'text-slate-400 group-hover:scale-110 group-hover:text-blue-500'}`} />
+                {!sidebarCollapsed && <span className="flex-1 text-left tracking-tight">{item.name}</span>}
               </button>
             ))}
           </nav>
-          <div className="p-6 mt-auto flex-shrink-0">
-            <div className="bg-slate-50 rounded-[2rem] p-4 border border-slate-100/50">
+
+          <div className="p-4 mt-auto flex-shrink-0">
+            <div className={`bg-slate-50 rounded-2xl p-3 border border-slate-100/50 ${sidebarCollapsed ? 'flex justify-center' : ''}`}>
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-blue-600 font-black">{currentUser.name.substring(0, 2).toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-black text-slate-900 truncate leading-none mb-1">{currentUser.name}</p>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest truncate">{currentUser.role}</p>
+                <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-blue-600 font-black flex-shrink-0">
+                  {currentUser.name.substring(0, 2).toUpperCase()}
                 </div>
-                <button onClick={handleLogout} className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"><LogOut className="w-5 h-5" /></button>
+                {!sidebarCollapsed && (
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-slate-900 truncate leading-none mb-1">{currentUser.name}</p>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest truncate">{currentUser.role}</p>
+                  </div>
+                )}
+                {!sidebarCollapsed && (
+                  <button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90">
+                    <LogOut className="w-5 h-5" />
+                  </button>
+                )}
               </div>
+              {sidebarCollapsed && (
+                <button onClick={handleLogout} className="mt-3 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90">
+                  <LogOut className="w-5 h-5" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -148,7 +206,12 @@ const App: React.FC = () => {
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-100 h-20 flex items-center justify-between px-6 lg:px-10 flex-shrink-0 z-30">
           <div className="flex items-center gap-6">
-            <button className="lg:hidden p-3 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all shadow-sm active:scale-95" onClick={() => setSidebarOpen(true)}><Menu className="w-6 h-6 text-slate-600" /></button>
+            <Button 
+              variant="ghost" 
+              className="lg:hidden p-3 bg-slate-50 hover:bg-slate-100 rounded-2xl transition-all shadow-sm active:scale-95" 
+              onClick={() => setSidebarOpen(true)}
+              icon={<Menu className="w-6 h-6 text-slate-600" />}
+            />
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2.5 px-5 py-2.5 bg-slate-50/50 text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] rounded-2xl border border-slate-100"><MapPin className="w-3.5 h-3.5 text-blue-500" /><span>{currentCity.name} - {currentCity.uf}</span></div>
             </div>

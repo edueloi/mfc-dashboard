@@ -13,7 +13,9 @@ import {
   Filter,
   Search,
   Check,
-  X
+  X,
+  BarChart as BarChartIcon,
+  TrendingUp as TrendingUpIcon
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -29,13 +31,17 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { mockTeams } from '../mockData';
+import { api } from '../services/api';
+import { BaseTeam } from '../types';
+import Button from '../components/Button';
+import Dropdown from '../components/Dropdown';
 
 interface DashboardProps {
   onNavigate: (view: any) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  const [teams, setTeams] = useState<BaseTeam[]>([]);
   const [selectedMonth, setSelectedMonth] = useState('06');
   const [selectedYear, setSelectedYear] = useState('2024');
   const [chartType, setChartType] = useState<'bar' | 'trend'>('bar');
@@ -45,6 +51,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [teamSearch, setTeamSearch] = useState('');
   const [isTeamFilterOpen, setIsTeamFilterOpen] = useState(false);
   const teamFilterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchTeams = async () => {
+      try {
+        const data = await api.getTeams();
+        setTeams(data);
+      } catch (err) {
+        console.error('Failed to fetch teams', err);
+      }
+    };
+    fetchTeams();
+  }, []);
 
   // Fecha o dropdown ao clicar fora
   useEffect(() => {
@@ -66,25 +84,22 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
   // Filtra a lista de equipes para o dropdown baseado na busca
   const filteredTeamsForSelect = useMemo(() => {
-    return mockTeams.filter(team => 
+    return teams.filter(team => 
       team.name.toLowerCase().includes(teamSearch.toLowerCase())
     );
-  }, [teamSearch]);
+  }, [teams, teamSearch]);
 
   // Dados do gráfico de barras filtrados pelas equipes selecionadas
   const barData = useMemo(() => {
-    const allData = [
-      { id: 't1', name: 'S.P Apóstolo', value: 100 },
-      { id: 't2', name: 'N.S Paz', value: 85 },
-      { id: 't3', name: 'S. Família', value: 92 },
-      { id: 't4', name: 'N.S Graças', value: 78 },
-      { id: 't5', name: 'S. Expedito', value: 100 },
-      { id: 't6', name: 'Jovens MFC', value: 65 },
-    ];
+    const allData = teams.map(team => ({
+      id: team.id,
+      name: team.name.split(' ').map(w => w[0]).join(''), // Abbreviate
+      value: Math.floor(Math.random() * 40) + 60 // Mock value for now
+    }));
 
     if (selectedTeamIds.length === 0) return allData;
     return allData.filter(d => selectedTeamIds.includes(d.id));
-  }, [selectedTeamIds]);
+  }, [teams, selectedTeamIds]);
 
   const trendData = useMemo(() => [
     { name: 'Jan', value: 4000 },
@@ -134,9 +149,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (
-          <div key={stat.label} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-2xl hover:-translate-y-1 transition-all cursor-pointer group" onClick={() => stat.view && onNavigate(stat.view)}>
+          <div key={stat.label} className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group" onClick={() => stat.view && onNavigate(stat.view)}>
             <div className="flex items-center justify-between mb-6">
-              <div className={`${stat.color} p-4 rounded-2xl text-white shadow-lg shadow-${stat.color.split('-')[1]}-100 rotate-2 group-hover:rotate-0 transition-transform`}>
+              <div className={`${stat.color} p-4 rounded-2xl text-white shadow-lg shadow-blue-900/10 rotate-2 group-hover:rotate-0 transition-transform`}>
                 <stat.icon className="w-6 h-6" />
               </div>
               <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest bg-gray-50 px-2 py-1 rounded-lg">
@@ -163,41 +178,45 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex bg-gray-50 p-1 rounded-xl border border-gray-100 mr-2">
-                <button 
+                <Button 
+                  variant={chartType === 'bar' ? 'primary' : 'ghost'}
                   onClick={() => setChartType('bar')}
-                  className={`p-2 rounded-lg transition-all ${chartType === 'bar' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400'}`}
+                  className="p-2 rounded-lg"
                   title="Ver Barras"
                 >
                   <BarChart3 className="w-4 h-4" />
-                </button>
-                <button 
+                </Button>
+                <Button 
+                  variant={chartType === 'trend' ? 'primary' : 'ghost'}
                   onClick={() => setChartType('trend')}
-                  className={`p-2 rounded-lg transition-all ${chartType === 'trend' ? 'bg-white shadow-sm text-blue-600' : 'text-gray-400'}`}
+                  className="p-2 rounded-lg"
                   title="Ver Tendência"
                 >
                   <TrendingUp className="w-4 h-4" />
-                </button>
+                </Button>
               </div>
 
               <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
                 <Calendar className="w-3.5 h-3.5 text-gray-400 ml-2" />
-                <select 
-                  className="bg-transparent text-[10px] font-black text-gray-600 uppercase border-none focus:ring-0 cursor-pointer"
+                <Dropdown
                   value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                >
-                  {months.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-                </select>
+                  onChange={setSelectedMonth}
+                  options={months.map(m => ({ value: m.v, label: m.l }))}
+                  variant="ghost"
+                  className="border-none shadow-none text-[10px] font-black text-gray-600 uppercase"
+                />
                 <div className="w-px h-3 bg-gray-200 mx-1"></div>
-                <select 
-                  className="bg-transparent text-[10px] font-black text-gray-600 uppercase border-none focus:ring-0 cursor-pointer"
+                <Dropdown
                   value={selectedYear}
-                  onChange={(e) => setSelectedYear(e.target.value)}
-                >
-                  <option value="2024">2024</option>
-                  <option value="2023">2023</option>
-                  <option value="2022">2022</option>
-                </select>
+                  onChange={setSelectedYear}
+                  options={[
+                    { value: '2024', label: '2024' },
+                    { value: '2023', label: '2023' },
+                    { value: '2022', label: '2022' },
+                  ]}
+                  variant="ghost"
+                  className="border-none shadow-none text-[10px] font-black text-gray-600 uppercase"
+                />
               </div>
             </div>
           </div>
@@ -213,7 +232,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {selectedTeamIds.map(id => {
-                      const team = mockTeams.find(t => t.id === id);
+                      const team = teams.find(t => t.id === id);
                       return (
                         <span key={id} className="inline-flex items-center gap-1.5 bg-blue-600 text-white px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest animate-in zoom-in-95">
                           {team?.name}
